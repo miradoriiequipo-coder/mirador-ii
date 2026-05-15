@@ -1,4 +1,7 @@
 venv/
-__pycache__/
 mirador.db
+__pycache__/
+*.pyc
 .env
+*.egg-info/
+.DS_Store

@@ -6,29 +6,46 @@
   <title>Mirador II FC</title>
   <link rel="stylesheet" href="/assets/style.css"/>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>"/>
+  <style>
+    /* Banner torneo archivado */
+    #tournament-banner {
+      display: none;
+      background: linear-gradient(90deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05));
+      border-bottom: 1px solid rgba(245,158,11,0.3);
+      padding: 8px 20px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gold);
+    }
+    /* Selector de torneos en navbar */
+    #tournament-selector-wrap {
+      display: flex;
+      align-items: center;
+    }
+    @media (max-width: 768px) {
+      #tournament-selector-wrap { display: none; }
+    }
+  </style>
 </head>
 <body>
 
-<!-- Admin Bar -->
 <div id="admin-bar">⚙️ Modo Administrador activado</div>
+<div id="tournament-banner"></div>
 
-<!-- Navbar -->
 <nav id="navbar">
-  <div class="nav-brand">
-    ⚽ MIRADOR II <span class="badge">FC</span>
-  </div>
+  <div class="nav-brand">⚽ MIRADOR II <span class="badge">FC</span></div>
+  <!-- Selector de torneos centrado -->
+  <div id="tournament-selector-wrap"></div>
   <ul class="nav-links">
     <li><a href="#" class="active" data-page="home">Inicio</a></li>
     <li><a href="#" data-page="players">Integrantes</a></li>
     <li><a href="#" data-page="payments">Dineros</a></li>
   </ul>
   <button id="btn-login">Iniciar sesión</button>
-  <button id="hamburger" aria-label="Menú">
-    <span></span><span></span><span></span>
-  </button>
+  <button id="hamburger" aria-label="Menú"><span></span><span></span><span></span></button>
 </nav>
 
-<!-- Mobile Menu -->
 <div id="mobile-menu">
   <a href="#" data-page="home">🏠 Inicio</a>
   <a href="#" data-page="players">👥 Integrantes</a>
@@ -36,153 +53,130 @@
   <button id="btn-login-mobile" class="btn btn-primary" style="margin-top:12px">Iniciar sesión</button>
 </div>
 
-<!-- ════ PAGE: HOME ════════════════════════════════════════════════ -->
+<!-- ════ PAGE: HOME ═══════════════════════════════ -->
 <div id="page-home" class="page active">
-
-  <!-- Hero -->
   <section id="hero">
-    <div class="hero-badge">⚽ Temporada 2024</div>
+    <div class="hero-badge">⚽ Mirador II FC</div>
     <h1>MIRADOR <span>II</span></h1>
     <p>El equipo que nunca se rinde · Siempre adelante</p>
   </section>
-
   <div class="container">
-
-    <!-- Próximos Partidos (slider) -->
     <section class="section">
       <div class="section-header">
-        <h2 class="section-title"><span class="dot">◆</span> Próximos Partidos</h2>
+        <h2 class="section-title"><span class="dot">◆</span> Partidos</h2>
         <div style="display:flex;gap:8px">
           <button class="slider-nav" id="prev-match">‹</button>
           <button class="slider-nav" id="next-match">›</button>
         </div>
       </div>
-      <div class="slider-wrapper" id="upcoming-slider">
-        <div class="slider-track" id="upcoming-track">
-          <div class="loading-wrap"><div class="spinner"></div></div>
-        </div>
-      </div>
+      <div class="slider-wrapper"><div class="slider-track" id="upcoming-track"><div class="loading-wrap"><div class="spinner"></div></div></div></div>
       <div class="slider-controls" id="slider-dots"></div>
     </section>
-
-    <!-- Último Resultado -->
     <section class="section">
-      <div class="section-header">
-        <h2 class="section-title"><span class="dot">◆</span> Último Resultado</h2>
-      </div>
-      <div id="last-result-wrap">
-        <div class="loading-wrap"><div class="spinner"></div></div>
-      </div>
+      <div class="section-header"><h2 class="section-title"><span class="dot">◆</span> Último Resultado</h2></div>
+      <div id="last-result-wrap"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </section>
-
-    <!-- Votación MVP -->
     <section class="section">
-      <div class="section-header">
-        <h2 class="section-title"><span class="dot">◆</span> MVP del Partido</h2>
-      </div>
-      <div id="vote-section">
-        <div class="loading-wrap"><div class="spinner"></div></div>
-      </div>
+  <div class="section-header">
+    <h2 class="section-title"><span class="dot">◆</span> Estadísticas del Torneo</h2>
+  </div>
+  <div id="standings-wrap">
+    <div class="loading-wrap"><div class="spinner"></div></div>
+  </div>
+</section>
+    <section class="section">
+      <div class="section-header"><h2 class="section-title"><span class="dot">◆</span> MVP del Partido</h2></div>
+      <div id="vote-section"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </section>
+  </div>
+</div>
 
-  </div><!-- /container -->
-</div><!-- /page-home -->
-
-<!-- ════ PAGE: PLAYERS ════════════════════════════════════════════ -->
+<!-- ════ PAGE: PLAYERS ════════════════════════════ -->
 <div id="page-players" class="page">
   <div class="container">
     <div class="section-header" style="padding-top:32px">
       <h2 class="section-title"><span class="dot">◆</span> Integrantes</h2>
       <button class="btn btn-primary admin-only" id="btn-add-player" style="display:none">+ Agregar</button>
     </div>
-    <div id="players-grid" class="players-grid">
-      <div class="loading-wrap"><div class="spinner"></div></div>
-    </div>
+    <div id="players-grid" class="players-grid"><div class="loading-wrap"><div class="spinner"></div></div></div>
   </div>
 </div>
 
-<!-- ════ PAGE: PAYMENTS ═══════════════════════════════════════════ -->
+<!-- ════ PAGE: PAYMENTS ═══════════════════════════ -->
 <div id="page-payments" class="page">
   <div class="container">
     <div class="section-header" style="padding-top:32px">
       <h2 class="section-title"><span class="dot">◆</span> Dineros del Equipo</h2>
       <button class="btn btn-primary admin-only" id="btn-add-payment" style="display:none">+ Registrar Pago</button>
     </div>
-
-    <!-- Resumen -->
     <div id="payments-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px"></div>
-
+    <div id="configs-section" style="margin-bottom:24px"></div>
     <div class="card payments-table-wrap">
       <table class="payments-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Jugador</th>
-            <th>Inscripción</th>
-            <th>Arbitrajes</th>
-            <th>Total</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="payments-body">
-          <tr><td colspan="6"><div class="loading-wrap"><div class="spinner"></div></div></td></tr>
-        </tbody>
+        <thead><tr><th>#</th><th>Jugador</th><th>Deuda Total</th><th>Pagado</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="payments-body"><tr><td colspan="6"><div class="loading-wrap"><div class="spinner"></div></div></td></tr></tbody>
       </table>
     </div>
   </div>
 </div>
 
-<!-- ════ TOAST ════════════════════════════════════════════════════ -->
 <div id="toast-container"></div>
 
-<!-- ════ MODAL: Login ════════════════════════════════════════════ -->
+<!-- ════ MODAL: Login ════════════════════════════════ -->
 <div class="modal-overlay" id="modal-login">
   <div class="modal">
     <button class="modal-close" data-close="modal-login">×</button>
     <div class="modal-title">🔐 Iniciar Sesión</div>
-    <div class="form-group">
-      <label class="form-label">Usuario</label>
-      <input class="form-input" id="login-user" placeholder="admin" type="text"/>
+    <div class="form-group"><label class="form-label">Usuario</label><input class="form-input" id="login-user" placeholder="admin" type="text"/></div>
+    <div class="form-group"><label class="form-label">Contraseña</label><input class="form-input" id="login-pass" placeholder="••••••••" type="password"/></div>
+    <div class="form-error" id="login-error"></div>
+    <div class="form-actions"><button class="btn btn-primary" id="btn-do-login">Ingresar</button></div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Nuevo Torneo ═════════════════════════ -->
+<div class="modal-overlay" id="modal-tournament">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-tournament">×</button>
+    <div class="modal-title">⚽ Nuevo Torneo</div>
+    <div style="background:var(--surface);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--muted)">
+      Al crear un nuevo torneo, el torneo actual quedará archivado y podrás consultarlo en cualquier momento. Empezarás desde cero con jugadores, partidos y dineros nuevos.
     </div>
     <div class="form-group">
-      <label class="form-label">Contraseña</label>
-      <input class="form-input" id="login-pass" placeholder="••••••••" type="password"/>
+      <label class="form-label">Nombre del Torneo *</label>
+      <input class="form-input" id="t-name" placeholder="Liga Barrial Norte 2025"/>
     </div>
-    <div class="form-error" id="login-error">Usuario o contraseña incorrectos</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Temporada</label>
+        <input class="form-input" id="t-season" placeholder="2025-I"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descripción</label>
+      <input class="form-input" id="t-description" placeholder="Torneo relámpago, cancha La Esperanza..."/>
+    </div>
+    <div class="form-error" id="t-error"></div>
     <div class="form-actions">
-      <button class="btn btn-primary" id="btn-do-login">Ingresar</button>
+      <button class="btn btn-secondary" data-close="modal-tournament">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-tournament">Crear Torneo</button>
     </div>
   </div>
 </div>
 
-<!-- ════ MODAL: Add/Edit Player ══════════════════════════════════ -->
+<!-- ════ MODAL: Add/Edit Player ═══════════════════════ -->
 <div class="modal-overlay" id="modal-player">
   <div class="modal">
     <button class="modal-close" data-close="modal-player">×</button>
     <div class="modal-title" id="modal-player-title">Agregar Jugador</div>
     <input type="hidden" id="player-edit-id"/>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Cédula *</label>
-        <input class="form-input" id="p-idnumber" placeholder="1234567890" type="text"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Número # *</label>
-        <input class="form-input" id="p-number" placeholder="10" type="number"/>
-      </div>
+      <div class="form-group"><label class="form-label">Cédula *</label><input class="form-input" id="p-idnumber" placeholder="1234567890" type="text"/></div>
+      <div class="form-group"><label class="form-label">Número # *</label><input class="form-input" id="p-number" placeholder="10" type="number"/></div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Nombre Completo *</label>
-      <input class="form-input" id="p-name" placeholder="Juan Pérez García" type="text"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Teléfono</label>
-      <input class="form-input" id="p-phone" placeholder="300 123 4567" type="tel"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Información de Salud</label>
-      <input class="form-input" id="p-health" placeholder="Sin restricciones / Alergias..." type="text"/>
-    </div>
+    <div class="form-group"><label class="form-label">Nombre Completo *</label><input class="form-input" id="p-name" placeholder="Juan Pérez García" type="text"/></div>
+    <div class="form-group"><label class="form-label">Teléfono</label><input class="form-input" id="p-phone" placeholder="300 123 4567" type="tel"/></div>
+    <div class="form-group"><label class="form-label">Información de Salud</label><input class="form-input" id="p-health" placeholder="Sin restricciones..." type="text"/></div>
     <div class="form-error" id="player-error"></div>
     <div class="form-actions">
       <button class="btn btn-secondary" data-close="modal-player">Cancelar</button>
@@ -191,23 +185,16 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Add Match ════════════════════════════════════════ -->
+<!-- ════ MODAL: Add Match ═════════════════════════════ -->
 <div class="modal-overlay" id="modal-match">
   <div class="modal">
     <button class="modal-close" data-close="modal-match">×</button>
     <div class="modal-title" id="modal-match-title">Agregar Partido</div>
     <input type="hidden" id="match-edit-id"/>
-    <div class="form-group">
-      <label class="form-label">Rival *</label>
-      <input class="form-input" id="m-opponent" placeholder="Nombre del equipo rival"/>
-    </div>
+    <div class="form-group"><label class="form-label">Rival *</label><input class="form-input" id="m-opponent" placeholder="Nombre del equipo rival"/></div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Fecha y Hora *</label>
-        <input class="form-input" id="m-date" type="datetime-local"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Fase</label>
+      <div class="form-group"><label class="form-label">Fecha y Hora *</label><input class="form-input" id="m-date" type="datetime-local"/></div>
+      <div class="form-group"><label class="form-label">Fase</label>
         <select class="form-input" id="m-phase">
           <option value="">Sin fase</option>
           <option>Fase 1</option><option>Fase 2</option><option>Fase 3</option>
@@ -215,14 +202,8 @@
         </select>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Lugar</label>
-      <input class="form-input" id="m-location" placeholder="Cancha La Esperanza"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notas</label>
-      <input class="form-input" id="m-notes" placeholder="Uniforme oscuro, llevar agua..."/>
-    </div>
+    <div class="form-group"><label class="form-label">Lugar</label><input class="form-input" id="m-location" placeholder="Cancha La Esperanza"/></div>
+    <div class="form-group"><label class="form-label">Notas</label><input class="form-input" id="m-notes" placeholder="Uniforme oscuro..."/></div>
     <div class="form-error" id="match-error"></div>
     <div class="form-actions">
       <button class="btn btn-secondary" data-close="modal-match">Cancelar</button>
@@ -231,26 +212,19 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Set Result ═══════════════════════════════════════ -->
+<!-- ════ MODAL: Set Result ════════════════════════════ -->
 <div class="modal-overlay" id="modal-result">
   <div class="modal" style="max-width:560px">
     <button class="modal-close" data-close="modal-result">×</button>
     <div class="modal-title">Registrar Resultado</div>
     <input type="hidden" id="result-match-id"/>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Goles Mirador II</label>
-        <input class="form-input" id="r-home" type="number" min="0" value="0"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Goles Rival</label>
-        <input class="form-input" id="r-away" type="number" min="0" value="0"/>
-      </div>
+      <div class="form-group"><label class="form-label">Goles Mirador II</label><input class="form-input" id="r-home" type="number" min="0" value="0"/></div>
+      <div class="form-group"><label class="form-label">Goles Rival</label><input class="form-input" id="r-away" type="number" min="0" value="0"/></div>
     </div>
-    <!-- Goleadores -->
     <div style="margin-top:10px">
       <label class="form-label">Goleadores</label>
-      <div id="goals-list" style="margin-bottom:10px; display:flex; flex-direction:column; gap:8px"></div>
+      <div id="goals-list" style="margin-bottom:10px;display:flex;flex-direction:column;gap:8px"></div>
       <button class="btn btn-secondary" id="btn-add-goal-row" type="button">+ Añadir goleador</button>
     </div>
     <div class="form-error" id="result-error"></div>
@@ -261,44 +235,68 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Add Payment ══════════════════════════════════════ -->
+<!-- ════ MODAL: Add Payment ═══════════════════════════ -->
 <div class="modal-overlay" id="modal-payment">
   <div class="modal">
     <button class="modal-close" data-close="modal-payment">×</button>
     <div class="modal-title">Registrar Pago</div>
-    <div class="form-group">
-      <label class="form-label">Jugador *</label>
-      <select class="form-input" id="pay-player"></select>
-    </div>
+    <div class="form-group"><label class="form-label">Jugador *</label><select class="form-input" id="pay-player"></select></div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Tipo *</label>
-        <select class="form-input" id="pay-type">
-          <option value="inscripcion">Inscripción</option>
-          <option value="arbitraje">Arbitraje</option>
-        </select>
+      <div class="form-group"><label class="form-label">Tipo *</label>
+        <select class="form-input" id="pay-type"><option value="inscripcion">Inscripción</option><option value="arbitraje">Arbitraje</option></select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Fase</label>
-        <select class="form-input" id="pay-phase">
-          <option value="">Sin fase</option>
-          <option>Fase 1</option><option>Fase 2</option><option>Fase 3</option>
-          <option>Cuartos de Final</option><option>Semifinal</option><option>Final</option>
-        </select>
+      <div class="form-group"><label class="form-label">Fase</label>
+        <select class="form-input" id="pay-phase"><option value="">Sin fase</option><option>Fase 1</option><option>Fase 2</option><option>Fase 3</option><option>Cuartos de Final</option><option>Semifinal</option><option>Final</option></select>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Monto (COP) *</label>
-      <input class="form-input" id="pay-amount" type="number" min="0" placeholder="50000"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notas</label>
-      <input class="form-input" id="pay-notes" placeholder="Abono, pago completo..."/>
-    </div>
+    <div class="form-group"><label class="form-label">Monto (COP) *</label><input class="form-input" id="pay-amount" type="number" min="0" placeholder="50000"/></div>
+    <div class="form-group"><label class="form-label">Notas</label><input class="form-input" id="pay-notes" placeholder="Abono, pago completo..."/></div>
     <div class="form-error" id="payment-error"></div>
     <div class="form-actions">
       <button class="btn btn-secondary" data-close="modal-payment">Cancelar</button>
       <button class="btn btn-primary" id="btn-save-payment">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Configurar Inscripción ════════════════ -->
+<div class="modal-overlay" id="modal-inscripcion">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-inscripcion">×</button>
+    <div class="modal-title">💰 Configurar Inscripción</div>
+    <div style="background:var(--surface);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--muted)">El monto total se divide entre todos los jugadores activos del torneo.</div>
+    <div class="form-group"><label class="form-label">Monto Total (COP) *</label><input class="form-input" id="insc-total" type="number" min="0" placeholder="Ej: 1500000"/></div>
+    <div class="form-group"><label class="form-label">Notas</label><input class="form-input" id="insc-notes" placeholder="Temporada 2025..."/></div>
+    <div class="form-error" id="insc-error"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" data-close="modal-inscripcion">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-inscripcion">Asignar deuda</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Arbitraje por Fase ════════════════════ -->
+<div class="modal-overlay" id="modal-arbitraje">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-arbitraje">×</button>
+    <div class="modal-title">🏟️ Arbitraje por Fase</div>
+    <div class="form-group"><label class="form-label">Fase *</label>
+      <select class="form-input" id="arb-fase">
+        <option value="">Seleccionar...</option>
+        <option>Fase 1</option><option>Fase 2</option><option>Fase 3</option>
+        <option>Cuartos de Final</option><option>Semifinal</option><option>Final</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nº de Partidos *</label><input class="form-input" id="arb-games" type="number" min="1" placeholder="Ej: 5"/></div>
+      <div class="form-group"><label class="form-label">Valor Arbitraje c/partido *</label><input class="form-input" id="arb-price" type="number" min="0" placeholder="Ej: 130000"/></div>
+    </div>
+    <div id="arb-preview" style="font-size:14px;font-weight:700;padding:10px 0;min-height:24px"></div>
+    <div class="form-group"><label class="form-label">Notas</label><input class="form-input" id="arb-notes" placeholder="Opcional..."/></div>
+    <div class="form-error" id="arb-error"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" data-close="modal-arbitraje">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-arbitraje">Asignar deuda</button>
     </div>
   </div>
 </div>

@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
-from typing import List
-from .. import models, schemas
+from typing import Optional
+from .. import models
 from ..database import get_db
 from ..auth import get_current_user, require_admin
 
 router = APIRouter(tags=["matches"])
+
+
+def _get_tournament_id(t: Optional[int], db: Session) -> Optional[int]:
+    if t:
+        return t
+    active = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
+    return active.id if active else None
 
 
 def _goal_detail(g: models.Goal) -> dict:
@@ -37,33 +44,28 @@ def _match_response(m: models.Match) -> dict:
     }
 
 
-# ─── Matches CRUD ────────────────────────────────────────────────────────────
-
 @router.get("/matches")
-def list_matches(db: Session = Depends(get_db)):
-    matches = (
-        db.query(models.Match)
-        .options(
-            joinedload(models.Match.goals).joinedload(models.Goal.player),
-            joinedload(models.Match.goals).joinedload(models.Goal.assist_player),
-        )
-        .order_by(models.Match.match_date)
-        .all()
+def list_matches(
+    t: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
+    tid = _get_tournament_id(t, db)
+    q = db.query(models.Match).options(
+        joinedload(models.Match.goals).joinedload(models.Goal.player),
+        joinedload(models.Match.goals).joinedload(models.Goal.assist_player),
     )
+    if tid:
+        q = q.filter(models.Match.tournament_id == tid)
+    matches = q.order_by(models.Match.match_date.desc()).all()
     return [_match_response(m) for m in matches]
 
 
 @router.get("/matches/{match_id}")
 def get_match(match_id: int, db: Session = Depends(get_db)):
-    m = (
-        db.query(models.Match)
-        .options(
-            joinedload(models.Match.goals).joinedload(models.Goal.player),
-            joinedload(models.Match.goals).joinedload(models.Goal.assist_player),
-        )
-        .filter(models.Match.id == match_id)
-        .first()
-    )
+    m = db.query(models.Match).options(
+        joinedload(models.Match.goals).joinedload(models.Goal.player),
+        joinedload(models.Match.goals).joinedload(models.Goal.assist_player),
+    ).filter(models.Match.id == match_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
     return _match_response(m)
@@ -71,32 +73,48 @@ def get_match(match_id: int, db: Session = Depends(get_db)):
 
 @router.post("/matches")
 def create_match(
-    body: schemas.MatchCreate,
+    body: dict,
+    t: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    match = models.Match(**body.model_dump())
+    tid = _get_tournament_id(t, db)
+    if not tid:
+        raise HTTPException(status_code=400, detail="No hay torneo activo. Crea uno primero.")
+    from datetime import datetime
+    match = models.Match(
+        tournament_id=tid,
+        opponent=body.get("opponent"),
+        match_date=datetime.fromisoformat(body.get("match_date").replace("Z", "")),
+        location=body.get("location"),
+        phase=body.get("phase"),
+        notes=body.get("notes"),
+    )
     db.add(match)
     db.commit()
     db.refresh(match)
-    return _match_response(match)
+    return get_match(match.id, db)
 
 
 @router.put("/matches/{match_id}")
 def update_match(
     match_id: int,
-    body: schemas.MatchUpdate,
+    body: dict,
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
     match = db.query(models.Match).filter(models.Match.id == match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(match, field, value)
+    allowed = ["opponent","match_date","location","phase","notes","is_played","home_score","away_score"]
+    for field in allowed:
+        if field in body:
+            val = body[field]
+            if field == "match_date" and val:
+                from datetime import datetime
+                val = datetime.fromisoformat(str(val).replace("Z", ""))
+            setattr(match, field, val)
     db.commit()
-    db.refresh(match)
-    # reload with goals
     return get_match(match_id, db)
 
 
@@ -114,27 +132,26 @@ def delete_match(
     return {"message": "Partido eliminado"}
 
 
-# ─── Goals ───────────────────────────────────────────────────────────────────
-
 @router.post("/matches/{match_id}/goals")
 def add_goal(
     match_id: int,
-    body: schemas.GoalCreate,
+    body: dict,
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
     match = db.query(models.Match).filter(models.Match.id == match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
-    player = db.query(models.Player).filter(models.Player.id == body.player_id).first()
-    if not player:
-        raise HTTPException(status_code=404, detail="Jugador no encontrado")
-    
-    goal = models.Goal(match_id=match_id, **body.model_dump())
+    goal = models.Goal(
+        match_id=match_id,
+        player_id=body.get("player_id"),
+        count=body.get("count", 1),
+        assist_player_id=body.get("assist_player_id"),
+        minute=body.get("minute"),
+    )
     db.add(goal)
     db.commit()
     db.refresh(goal)
-    # reload relationships
     goal = db.query(models.Goal).options(
         joinedload(models.Goal.player),
         joinedload(models.Goal.assist_player),

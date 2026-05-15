@@ -6,16 +6,11 @@ import os
 
 from .database import engine
 from . import models
-from .routers import auth, players, matches, payments, votes
+from .routers import auth, players, matches, payments, votes, finances, tournaments
 
-# Crea todas las tablas automáticamente
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="Mirador II FC",
-    description="API para el equipo de fútbol Mirador II",
-    version="1.0.0",
-)
+app = FastAPI(title="Mirador II FC", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,33 +20,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir routers
-app.include_router(auth.router, prefix="/api")
-app.include_router(players.router, prefix="/api")
-app.include_router(matches.router, prefix="/api")
-app.include_router(payments.router, prefix="/api")
-app.include_router(votes.router, prefix="/api")
+app.include_router(auth.router,        prefix="/api")
+app.include_router(players.router,     prefix="/api")
+app.include_router(matches.router,     prefix="/api")
+app.include_router(payments.router,    prefix="/api")
+app.include_router(votes.router,       prefix="/api")
+app.include_router(finances.router,    prefix="/api")
+app.include_router(tournaments.router, prefix="/api")
 
-# Servir el frontend estático
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 if os.path.isdir(STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
+    def serve_index():
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
     @app.get("/{path:path}", include_in_schema=False)
     def serve_spa(path: str = ""):
-        # No interceptar rutas de la API
         if path.startswith("api/") or path.startswith("assets/"):
             from fastapi import HTTPException
             raise HTTPException(status_code=404)
         index = os.path.join(STATIC_DIR, "index.html")
         if os.path.exists(index):
             return FileResponse(index)
-        return {"message": "Frontend no encontrado"}
-
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "Mirador II FC"}
+    return {"status": "ok", "app": "Mirador II FC v2"}

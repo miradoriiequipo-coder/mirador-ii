@@ -4,6 +4,17 @@ from sqlalchemy.sql import func
 from .database import Base
 
 
+class Tournament(Base):
+    __tablename__ = "tournaments"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)          # "Liga Barrial 2024"
+    season = Column(String, nullable=True)         # "2024", "2024-I"
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    closed_at = Column(DateTime, nullable=True)
+
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -16,7 +27,8 @@ class User(Base):
 class Player(Base):
     __tablename__ = "players"
     id = Column(Integer, primary_key=True, index=True)
-    id_number = Column(String, unique=True)   # Cédula - oculta para público
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
+    id_number = Column(String)
     full_name = Column(String, nullable=False)
     player_number = Column(Integer)
     phone = Column(String, nullable=True)
@@ -29,15 +41,17 @@ class Player(Base):
     assists = relationship("Goal", back_populates="assist_player", foreign_keys="Goal.assist_player_id")
     votes = relationship("Vote", back_populates="player")
     payments = relationship("Payment", back_populates="player")
+    deudas = relationship("Deuda", back_populates="player")
 
 
 class Match(Base):
     __tablename__ = "matches"
     id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
     opponent = Column(String, nullable=False)
     match_date = Column(DateTime, nullable=False)
     location = Column(String, nullable=True)
-    phase = Column(String, nullable=True)       # Fase 1, Cuartos, Final, etc.
+    phase = Column(String, nullable=True)
     is_played = Column(Boolean, default=False)
     home_score = Column(Integer, nullable=True)
     away_score = Column(Integer, nullable=True)
@@ -77,11 +91,53 @@ class Vote(Base):
 class Payment(Base):
     __tablename__ = "payments"
     id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
     player_id = Column(Integer, ForeignKey("players.id"))
-    payment_type = Column(String, nullable=False)   # "inscripcion" | "arbitraje"
-    phase = Column(String, nullable=True)            # Fase 1, Fase 2, etc.
+    payment_type = Column(String, nullable=False)
+    phase = Column(String, nullable=True)
     amount = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     player = relationship("Player", back_populates="payments")
+
+
+class Deuda(Base):
+    __tablename__ = "deudas"
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
+    player_id = Column(Integer, ForeignKey("players.id"))
+    tipo = Column(String, nullable=False)
+    fase = Column(String, nullable=True)
+    monto = Column(Float, nullable=False)
+    concepto = Column(Text, nullable=True)
+    config_id = Column(Integer, nullable=True)
+    config_tipo = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    player = relationship("Player", back_populates="deudas")
+
+
+class InscripcionConfig(Base):
+    __tablename__ = "inscripcion_config"
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
+    total_amount = Column(Float, nullable=False)
+    num_players = Column(Integer, nullable=False)
+    amount_per_player = Column(Float, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ArbitrajePhase(Base):
+    __tablename__ = "arbitraje_phases"
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
+    fase = Column(String, nullable=False)
+    num_games = Column(Integer, nullable=False)
+    price_per_game = Column(Float, nullable=False)
+    num_players = Column(Integer, nullable=False)
+    total_phase = Column(Float, nullable=False)
+    amount_per_player = Column(Float, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
