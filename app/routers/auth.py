@@ -27,7 +27,7 @@ def setup_admin(db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="El admin ya existe")
     
-    default_pass = os.getenv("ADMIN_PASSWORD", "MiradorII2024!")
+    default_pass = os.getenv("ADMIN_PASSWORD", "Mirador2026")
     user = models.User(
         username="admin",
         hashed_password=hash_password(default_pass),
