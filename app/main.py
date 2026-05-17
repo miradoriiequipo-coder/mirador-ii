@@ -6,11 +6,11 @@ import os
 
 from .database import engine
 from . import models
-from .routers import auth, players, matches, payments, votes, finances, tournaments
+from .routers import auth, players, matches, payments, votes, finances, tournaments, gallery, ai
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Mirador II FC", version="2.0.0")
+app = FastAPI(title="Mirador II FC", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +27,8 @@ app.include_router(payments.router,    prefix="/api")
 app.include_router(votes.router,       prefix="/api")
 app.include_router(finances.router,    prefix="/api")
 app.include_router(tournaments.router, prefix="/api")
+app.include_router(gallery.router,     prefix="/api")
+app.include_router(ai.router,          prefix="/api")
 
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -49,4 +51,4 @@ if os.path.isdir(STATIC_DIR):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "Mirador II FC v2"}
+    return {"status": "ok", "app": "Mirador II FC v3"}

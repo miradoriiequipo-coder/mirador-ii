@@ -7,8 +7,8 @@ from .database import Base
 class Tournament(Base):
     __tablename__ = "tournaments"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)          # "Liga Barrial 2024"
-    season = Column(String, nullable=True)         # "2024", "2024-I"
+    name = Column(String, nullable=False)
+    season = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -34,6 +34,8 @@ class Player(Base):
     phone = Column(String, nullable=True)
     health_info = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+    status = Column(String, default="activo", nullable=False)
+    joined_at_match = Column(Integer, nullable=True)
     photo_url = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -125,6 +127,7 @@ class InscripcionConfig(Base):
     total_amount = Column(Float, nullable=False)
     num_players = Column(Integer, nullable=False)
     amount_per_player = Column(Float, nullable=False)
+    total_matches = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -140,4 +143,15 @@ class ArbitrajePhase(Base):
     total_phase = Column(Float, nullable=False)
     amount_per_player = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+# ── Galería de fotos ──────────────────────────────────────────────
+class Photo(Base):
+    __tablename__ = "photos"
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
+    url = Column(String, nullable=False)
+    storage_path = Column(String, nullable=False)
+    caption = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

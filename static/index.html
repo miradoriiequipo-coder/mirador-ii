@@ -7,25 +7,18 @@
   <link rel="stylesheet" href="/assets/style.css"/>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>"/>
   <style>
-    /* Banner torneo archivado */
     #tournament-banner {
       display: none;
-      background: linear-gradient(90deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05));
-      border-bottom: 1px solid rgba(245,158,11,0.3);
-      padding: 8px 20px;
+      background: #fff8e1;
+      border-bottom: 1px solid #f0c040;
+      padding: 8px 16px;
       text-align: center;
       font-size: 13px;
       font-weight: 600;
-      color: var(--gold);
+      color: #7a5200;
     }
-    /* Selector de torneos en navbar */
-    #tournament-selector-wrap {
-      display: flex;
-      align-items: center;
-    }
-    @media (max-width: 768px) {
-      #tournament-selector-wrap { display: none; }
-    }
+    #tournament-selector-wrap { display: flex; align-items: center; flex: 1; min-width: 0; }
+    @media (max-width: 640px) { #tournament-selector-wrap { display: none !important; } }
   </style>
 </head>
 <body>
@@ -35,12 +28,13 @@
 
 <nav id="navbar">
   <div class="nav-brand">⚽ MIRADOR II <span class="badge">FC</span></div>
-  <!-- Selector de torneos centrado -->
   <div id="tournament-selector-wrap"></div>
   <ul class="nav-links">
     <li><a href="#" class="active" data-page="home">Inicio</a></li>
     <li><a href="#" data-page="players">Integrantes</a></li>
     <li><a href="#" data-page="payments">Dineros</a></li>
+    <li><a href="#" data-page="gallery">📸 Galería</a></li>
+    <li><a href="#" data-page="ai">🤖 IA</a></li>
   </ul>
   <button id="btn-login">Iniciar sesión</button>
   <button id="hamburger" aria-label="Menú"><span></span><span></span><span></span></button>
@@ -50,10 +44,12 @@
   <a href="#" data-page="home">🏠 Inicio</a>
   <a href="#" data-page="players">👥 Integrantes</a>
   <a href="#" data-page="payments">💰 Dineros</a>
+  <a href="#" data-page="gallery">📸 Galería</a>
+  <a href="#" data-page="ai">🤖 Inteligencia Artificial</a>
   <button id="btn-login-mobile" class="btn btn-primary" style="margin-top:12px">Iniciar sesión</button>
 </div>
 
-<!-- ════ PAGE: HOME ═══════════════════════════════ -->
+<!-- ════ PAGE: HOME ════════════════════════════════════ -->
 <div id="page-home" class="page active">
   <section id="hero">
     <div class="hero-badge">⚽ Mirador II FC</div>
@@ -61,6 +57,31 @@
     <p>El equipo que nunca se rinde · Siempre adelante</p>
   </section>
   <div class="container">
+
+    <!-- Boletín del torneo (visible si hay datos del PDF) -->
+    <div id="bulletin-banner" style="display:none;margin-bottom:8px"></div>
+
+    <!-- Mini chat en inicio (arriba, siempre visible) -->
+    <section class="section" style="margin-bottom:0;padding-bottom:8px">
+      <div class="card" style="padding:14px">
+        <div id="home-chat-messages" style="min-height:0;max-height:200px;overflow-y:auto;margin-bottom:10px;display:flex;flex-direction:column;gap:8px">
+          <div style="background:var(--navy);color:var(--on-navy);border-radius:10px 10px 10px 2px;padding:9px 13px;font-size:13px;max-width:88%;align-self:flex-start">
+            🤖 ¡Hola! Pregúntame lo que quieras sobre el equipo.
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input class="form-input" id="home-chat-input" placeholder="¿Quién ha goleado más? ¿Cuándo jugamos?..." style="flex:1;font-size:13px"/>
+          <button class="btn btn-primary" id="btn-home-chat-send" style="white-space:nowrap;font-size:13px">Enviar</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+          <button class="btn btn-secondary" style="font-size:11px" onclick="homeQuickChat('¿Cuándo es el próximo partido?')">📅 Próximo</button>
+          <button class="btn btn-secondary" style="font-size:11px" onclick="homeQuickChat('¿Quién ha goleado más en el torneo?')">⚽ Goleadores</button>
+          <button class="btn btn-secondary" style="font-size:11px" onclick="homeQuickChat('¿Cómo van los dineros del equipo?')">💰 Dineros</button>
+          <button class="btn btn-secondary" style="font-size:11px" onclick="homeQuickChat('¿Cuál es el resultado del último partido?')">🏆 Resultado</button>
+        </div>
+      </div>
+    </section>
+
     <section class="section">
       <div class="section-header">
         <h2 class="section-title"><span class="dot">◆</span> Partidos</h2>
@@ -72,26 +93,35 @@
       <div class="slider-wrapper"><div class="slider-track" id="upcoming-track"><div class="loading-wrap"><div class="spinner"></div></div></div></div>
       <div class="slider-controls" id="slider-dots"></div>
     </section>
+
     <section class="section">
-      <div class="section-header"><h2 class="section-title"><span class="dot">◆</span> Último Resultado</h2></div>
+      <div class="section-header"><h2 class="section-title"><span class="dot">◆</span> Resultados</h2></div>
       <div id="last-result-wrap"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </section>
+
     <section class="section">
-  <div class="section-header">
-    <h2 class="section-title"><span class="dot">◆</span> Estadísticas del Torneo</h2>
-  </div>
-  <div id="standings-wrap">
-    <div class="loading-wrap"><div class="spinner"></div></div>
-  </div>
-</section>
+      <div class="section-header"><h2 class="section-title"><span class="dot">◆</span> Estadísticas del Torneo</h2></div>
+      <div id="standings-wrap"><div class="loading-wrap"><div class="spinner"></div></div></div>
+    </section>
+
+    <!-- Galería preview en inicio -->
+    <section class="section" id="home-gallery-section" style="display:none">
+      <div class="section-header">
+        <h2 class="section-title"><span class="dot">◆</span> Galería</h2>
+        <a href="#" onclick="navigateTo('gallery');return false" style="font-size:12px;color:var(--navy);font-weight:600">Ver todas →</a>
+      </div>
+      <div id="home-gallery-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"></div>
+    </section>
+
     <section class="section">
       <div class="section-header"><h2 class="section-title"><span class="dot">◆</span> MVP del Partido</h2></div>
       <div id="vote-section"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </section>
+
   </div>
 </div>
 
-<!-- ════ PAGE: PLAYERS ════════════════════════════ -->
+<!-- ════ PAGE: PLAYERS ═════════════════════════════════ -->
 <div id="page-players" class="page">
   <div class="container">
     <div class="section-header" style="padding-top:32px">
@@ -102,27 +132,124 @@
   </div>
 </div>
 
-<!-- ════ PAGE: PAYMENTS ═══════════════════════════ -->
+<!-- ════ PAGE: PAYMENTS ════════════════════════════════ -->
 <div id="page-payments" class="page">
   <div class="container">
     <div class="section-header" style="padding-top:32px">
       <h2 class="section-title"><span class="dot">◆</span> Dineros del Equipo</h2>
       <button class="btn btn-primary admin-only" id="btn-add-payment" style="display:none">+ Registrar Pago</button>
     </div>
-    <div id="payments-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px"></div>
+    <div id="payments-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px"></div>
     <div id="configs-section" style="margin-bottom:24px"></div>
     <div class="card payments-table-wrap">
       <table class="payments-table">
-        <thead><tr><th>#</th><th>Jugador</th><th>Deuda Total</th><th>Pagado</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Jugador</th><th>Deuda</th><th>Pagado</th><th>Estado</th><th></th></tr></thead>
         <tbody id="payments-body"><tr><td colspan="6"><div class="loading-wrap"><div class="spinner"></div></div></td></tr></tbody>
       </table>
     </div>
   </div>
 </div>
 
+<!-- ════ PAGE: GALLERY ════════════════════════════════════ -->
+<div id="page-gallery" class="page">
+  <div class="container">
+    <div class="section-header" style="padding-top:32px">
+      <h2 class="section-title"><span class="dot">◆</span> Galería del Equipo</h2>
+      <button class="btn btn-primary admin-only" id="btn-upload-photo" style="display:none">📸 Subir foto</button>
+    </div>
+    <div id="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:8px">
+      <div class="loading-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ PAGE: AI ══════════════════════════════════════════ -->
+<div id="page-ai" class="page">
+  <div class="container">
+    <section id="hero" style="margin:0 -16px 24px;border-radius:0">
+      <div class="hero-badge">✨ Powered by Groq AI</div>
+      <h1 style="font-size:32px">IA <span>MIRADOR</span></h1>
+      <p>Tu asistente inteligente del equipo</p>
+    </section>
+
+    <!-- Asistente Chat -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:16px">🤖 Pregúntale al equipo</div>
+      <div id="chat-messages" style="min-height:80px;max-height:300px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:10px"></div>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="chat-input" placeholder="¿Cuánto debe Pérez? ¿Cuándo es el próximo partido?..." style="flex:1"/>
+        <button class="btn btn-primary" id="btn-chat-send" style="white-space:nowrap">Enviar</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+        <button class="btn btn-secondary" style="font-size:11px" onclick="quickChat('¿Cuánto debe cada jugador?')">💰 Deudas</button>
+        <button class="btn btn-secondary" style="font-size:11px" onclick="quickChat('¿Cuándo es el próximo partido?')">📅 Próximo partido</button>
+        <button class="btn btn-secondary" style="font-size:11px" onclick="quickChat('¿Cuál es el resultado del último partido?')">🏆 Último resultado</button>
+        <button class="btn btn-secondary" style="font-size:11px" onclick="quickChat('¿Quién es el goleador del torneo?')">⚽ Goleador</button>
+      </div>
+    </div>
+
+    <!-- Boletín PDF del torneo -->
+    <div class="card admin-only" style="margin-bottom:20px;display:none">
+      <div style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:4px">📄 Boletín del Torneo (PDF)</div>
+      <div style="font-size:13px;color:var(--text-faint);margin-bottom:14px">Sube el PDF que manda la Metropolitana — la IA extrae todo lo de Mirador II automáticamente</div>
+      <div style="background:var(--surface-low);border:2px dashed var(--border);border-radius:var(--radius-lg);padding:20px;text-align:center;cursor:pointer" onclick="$('pdf-input').click()">
+        <div style="font-size:32px;margin-bottom:6px">📋</div>
+        <div style="font-weight:600;color:var(--navy)">Clic para subir boletín PDF</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:4px">Archivos .pdf · Los martes y jueves</div>
+      </div>
+      <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handleTournamentPDF(this)"/>
+      <div id="pdf-loading" style="display:none;text-align:center;padding:20px">
+        <div class="spinner" style="margin:0 auto 10px"></div>
+        <div style="color:var(--text-faint)">Leyendo boletín con IA...</div>
+      </div>
+      <div id="pdf-result" style="display:none;margin-top:16px"></div>
+    </div>
+
+    <!-- Crónica de partidos -->
+    <div class="card admin-only" style="margin-bottom:20px;display:none">
+      <div style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:8px">📝 Crónica para Instagram</div>
+      <div style="font-size:13px;color:var(--text-faint);margin-bottom:14px">Selecciona un partido jugado y la IA genera el texto listo para copiar</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select class="form-input" id="chronicle-match" style="flex:1;min-width:200px">
+          <option value="">Seleccionar partido...</option>
+        </select>
+        <button class="btn btn-primary" id="btn-generate-chronicle">✨ Generar crónica</button>
+      </div>
+      <div id="chronicle-result" style="margin-top:14px;display:none">
+        <div style="background:var(--surface-low);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:16px;font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap" id="chronicle-text"></div>
+        <button class="btn btn-secondary" style="margin-top:10px" onclick="copyChronicle()">📋 Copiar para Instagram</button>
+      </div>
+    </div>
+
+    <!-- Lector de archivos Excel -->
+    <div class="card admin-only" style="display:none">
+      <div style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:8px">📊 Importar planilla de jugadores</div>
+      <div style="font-size:13px;color:var(--text-faint);margin-bottom:14px">Sube el Excel (.xlsx) del equipo — lee inscripción, arbitrajes y abonos por jugador automáticamente</div>
+      <div style="background:var(--surface-low);border:2px dashed var(--border);border-radius:var(--radius-lg);padding:24px;text-align:center;cursor:pointer" id="file-drop-zone" onclick="$('file-input').click()">
+        <div style="font-size:36px;margin-bottom:8px">📂</div>
+        <div style="font-weight:600;color:var(--navy)">Clic para seleccionar archivo</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:4px">Excel (.xlsx) o imagen (.jpg, .png)</div>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.jpg,.jpeg,.png" style="display:none" onchange="handleFileSelect(this)"/>
+      <div id="file-preview" style="margin-top:14px;display:none">
+        <div style="font-weight:700;color:var(--navy);margin-bottom:10px" id="file-preview-title"></div>
+        <div id="file-preview-table"></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-secondary" onclick="$('file-preview').style.display='none'">Cancelar</button>
+          <button class="btn btn-primary" id="btn-import-players">✅ Importar a la app</button>
+        </div>
+      </div>
+      <div id="file-loading" style="display:none;text-align:center;padding:20px">
+        <div class="spinner" style="margin:0 auto 10px"></div>
+        <div style="color:var(--text-faint)">Analizando archivo...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 
-<!-- ════ MODAL: Login ════════════════════════════════ -->
+<!-- ════ MODAL: Login ══════════════════════════════════ -->
 <div class="modal-overlay" id="modal-login">
   <div class="modal">
     <button class="modal-close" data-close="modal-login">×</button>
@@ -134,28 +261,17 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Nuevo Torneo ═════════════════════════ -->
+<!-- ════ MODAL: Nuevo Torneo ═══════════════════════════ -->
 <div class="modal-overlay" id="modal-tournament">
   <div class="modal">
     <button class="modal-close" data-close="modal-tournament">×</button>
     <div class="modal-title">⚽ Nuevo Torneo</div>
-    <div style="background:var(--surface);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--muted)">
-      Al crear un nuevo torneo, el torneo actual quedará archivado y podrás consultarlo en cualquier momento. Empezarás desde cero con jugadores, partidos y dineros nuevos.
+    <div style="background:var(--surface-low);border-radius:var(--radius-lg);padding:12px;margin-bottom:16px;font-size:13px;color:var(--text-faint)">
+      El torneo actual quedará archivado y podrás consultarlo en cualquier momento. Empezarás desde cero.
     </div>
-    <div class="form-group">
-      <label class="form-label">Nombre del Torneo *</label>
-      <input class="form-input" id="t-name" placeholder="Liga Barrial Norte 2025"/>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Temporada</label>
-        <input class="form-input" id="t-season" placeholder="2025-I"/>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Descripción</label>
-      <input class="form-input" id="t-description" placeholder="Torneo relámpago, cancha La Esperanza..."/>
-    </div>
+    <div class="form-group"><label class="form-label">Nombre del Torneo *</label><input class="form-input" id="t-name" placeholder="Liga Barrial Norte 2025"/></div>
+    <div class="form-group"><label class="form-label">Temporada</label><input class="form-input" id="t-season" placeholder="2025-I"/></div>
+    <div class="form-group"><label class="form-label">Descripción</label><input class="form-input" id="t-description" placeholder="Torneo relámpago, cancha La Esperanza..."/></div>
     <div class="form-error" id="t-error"></div>
     <div class="form-actions">
       <button class="btn btn-secondary" data-close="modal-tournament">Cancelar</button>
@@ -164,7 +280,7 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Add/Edit Player ═══════════════════════ -->
+<!-- ════ MODAL: Add/Edit Player ════════════════════════ -->
 <div class="modal-overlay" id="modal-player">
   <div class="modal">
     <button class="modal-close" data-close="modal-player">×</button>
@@ -177,6 +293,25 @@
     <div class="form-group"><label class="form-label">Nombre Completo *</label><input class="form-input" id="p-name" placeholder="Juan Pérez García" type="text"/></div>
     <div class="form-group"><label class="form-label">Teléfono</label><input class="form-input" id="p-phone" placeholder="300 123 4567" type="tel"/></div>
     <div class="form-group"><label class="form-label">Información de Salud</label><input class="form-input" id="p-health" placeholder="Sin restricciones..." type="text"/></div>
+
+    <!-- Jugador nuevo -->
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="p-is-new" style="width:16px;height:16px;cursor:pointer"/>
+        <span class="form-label" style="margin:0;cursor:pointer">¿Es jugador que entró tarde al torneo?</span>
+      </label>
+    </div>
+    <div id="p-new-fields" style="display:none;background:var(--surface-low);border-radius:var(--radius-lg);padding:14px;margin-bottom:14px;border:1px solid var(--border-light)">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">¿En qué número de partido entró? *</label>
+        <input class="form-input" id="p-joined-match" type="number" min="1" placeholder="Ej: 3"/>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:6px">
+          💡 Se calculará automáticamente su deuda proporcional de inscripción.<br/>
+          Los arbitrajes de fases anteriores no se le asignarán; los futuros sí.
+        </div>
+      </div>
+    </div>
+
     <div class="form-error" id="player-error"></div>
     <div class="form-actions">
       <button class="btn btn-secondary" data-close="modal-player">Cancelar</button>
@@ -185,7 +320,7 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Add Match ═════════════════════════════ -->
+<!-- ════ MODAL: Add Match ══════════════════════════════ -->
 <div class="modal-overlay" id="modal-match">
   <div class="modal">
     <button class="modal-close" data-close="modal-match">×</button>
@@ -212,7 +347,7 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Set Result ════════════════════════════ -->
+<!-- ════ MODAL: Resultado ══════════════════════════════ -->
 <div class="modal-overlay" id="modal-result">
   <div class="modal" style="max-width:560px">
     <button class="modal-close" data-close="modal-result">×</button>
@@ -235,7 +370,7 @@
   </div>
 </div>
 
-<!-- ════ MODAL: Add Payment ═══════════════════════════ -->
+<!-- ════ MODAL: Registrar Pago ════════════════════════ -->
 <div class="modal-overlay" id="modal-payment">
   <div class="modal">
     <button class="modal-close" data-close="modal-payment">×</button>
@@ -243,10 +378,18 @@
     <div class="form-group"><label class="form-label">Jugador *</label><select class="form-input" id="pay-player"></select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Tipo *</label>
-        <select class="form-input" id="pay-type"><option value="inscripcion">Inscripción</option><option value="arbitraje">Arbitraje</option></select>
+        <select class="form-input" id="pay-type">
+          <option value="inscripcion">Inscripción</option>
+          <option value="arbitraje">Arbitraje</option>
+          <option value="manual">Otro</option>
+        </select>
       </div>
       <div class="form-group"><label class="form-label">Fase</label>
-        <select class="form-input" id="pay-phase"><option value="">Sin fase</option><option>Fase 1</option><option>Fase 2</option><option>Fase 3</option><option>Cuartos de Final</option><option>Semifinal</option><option>Final</option></select>
+        <select class="form-input" id="pay-phase">
+          <option value="">Sin fase</option>
+          <option>Fase 1</option><option>Fase 2</option><option>Fase 3</option>
+          <option>Cuartos de Final</option><option>Semifinal</option><option>Final</option>
+        </select>
       </div>
     </div>
     <div class="form-group"><label class="form-label">Monto (COP) *</label><input class="form-input" id="pay-amount" type="number" min="0" placeholder="50000"/></div>
@@ -259,13 +402,55 @@
   </div>
 </div>
 
+<!-- ════ MODAL: Deuda Manual ══════════════════════════ -->
+<div class="modal-overlay" id="modal-deuda-manual">
+  <div class="modal">
+    <button class="modal-close" data-close="modal-deuda-manual">×</button>
+    <div class="modal-title">➕ Asignar Deuda Manual</div>
+    <div style="background:var(--surface-low);border-radius:var(--radius-lg);padding:12px;margin-bottom:16px;font-size:13px;color:var(--text-faint)">
+      Usa esto para asignar deudas proporcionales a jugadores nuevos, ajustes, o cobros especiales.
+    </div>
+    <div class="form-group"><label class="form-label">Jugador *</label><select class="form-input" id="deuda-player"></select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Tipo</label>
+        <select class="form-input" id="deuda-tipo">
+          <option value="inscripcion">Inscripción</option>
+          <option value="arbitraje">Arbitraje</option>
+          <option value="manual">Otro</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Fase</label>
+        <select class="form-input" id="deuda-fase">
+          <option value="">Sin fase</option>
+          <option>Fase 1</option><option>Fase 2</option><option>Fase 3</option>
+          <option>Cuartos de Final</option><option>Semifinal</option><option>Final</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Monto (COP) *</label><input class="form-input" id="deuda-monto" type="number" min="0" placeholder="75000"/></div>
+    <div class="form-group"><label class="form-label">Concepto</label><input class="form-input" id="deuda-concepto" placeholder="Inscripción proporcional, ajuste..."/></div>
+    <div class="form-error" id="deuda-error"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" data-close="modal-deuda-manual">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-deuda-manual">Asignar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ MODAL: Configurar Inscripción ════════════════ -->
 <div class="modal-overlay" id="modal-inscripcion">
   <div class="modal">
     <button class="modal-close" data-close="modal-inscripcion">×</button>
     <div class="modal-title">💰 Configurar Inscripción</div>
-    <div style="background:var(--surface);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--muted)">El monto total se divide entre todos los jugadores activos del torneo.</div>
+    <div style="background:var(--surface-low);border-radius:var(--radius-lg);padding:12px;margin-bottom:16px;font-size:13px;color:var(--text-faint)">
+      Se divide entre los jugadores <strong>activos</strong> en este momento. Lesionados e inactivos no reciben esta deuda.
+    </div>
     <div class="form-group"><label class="form-label">Monto Total (COP) *</label><input class="form-input" id="insc-total" type="number" min="0" placeholder="Ej: 1500000"/></div>
+    <div class="form-group">
+      <label class="form-label">Total de partidos del torneo</label>
+      <input class="form-input" id="insc-matches" type="number" min="0" placeholder="Ej: 7 (para calcular proporcional a jugadores nuevos)"/>
+      <div style="font-size:12px;color:var(--text-faint);margin-top:4px">Opcional — necesario para calcular deuda proporcional a jugadores que entren tarde</div>
+    </div>
     <div class="form-group"><label class="form-label">Notas</label><input class="form-input" id="insc-notes" placeholder="Temporada 2025..."/></div>
     <div class="form-error" id="insc-error"></div>
     <div class="form-actions">
@@ -280,6 +465,9 @@
   <div class="modal">
     <button class="modal-close" data-close="modal-arbitraje">×</button>
     <div class="modal-title">🏟️ Arbitraje por Fase</div>
+    <div style="background:var(--surface-low);border-radius:var(--radius-lg);padding:12px;margin-bottom:16px;font-size:13px;color:var(--text-faint)">
+      Solo se asigna a jugadores <strong>activos</strong>. Lesionados e inactivos quedan excluidos automáticamente.
+    </div>
     <div class="form-group"><label class="form-label">Fase *</label>
       <select class="form-input" id="arb-fase">
         <option value="">Seleccionar...</option>
@@ -291,12 +479,54 @@
       <div class="form-group"><label class="form-label">Nº de Partidos *</label><input class="form-input" id="arb-games" type="number" min="1" placeholder="Ej: 5"/></div>
       <div class="form-group"><label class="form-label">Valor Arbitraje c/partido *</label><input class="form-input" id="arb-price" type="number" min="0" placeholder="Ej: 130000"/></div>
     </div>
-    <div id="arb-preview" style="font-size:14px;font-weight:700;padding:10px 0;min-height:24px"></div>
+    <div id="arb-preview" style="font-size:13px;font-weight:600;padding:8px 0;min-height:24px"></div>
     <div class="form-group"><label class="form-label">Notas</label><input class="form-input" id="arb-notes" placeholder="Opcional..."/></div>
     <div class="form-error" id="arb-error"></div>
     <div class="form-actions">
       <button class="btn btn-secondary" data-close="modal-arbitraje">Cancelar</button>
       <button class="btn btn-primary" id="btn-save-arbitraje">Asignar deuda</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Confirmación global ═══════════════════ -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div id="confirm-icon" style="font-size:52px;margin-bottom:12px;line-height:1">⚠️</div>
+    <div class="modal-title" id="confirm-title" style="text-align:center;font-size:18px;margin-bottom:10px"></div>
+    <p id="confirm-msg" style="color:var(--text-muted);font-size:14px;line-height:1.5;margin-bottom:24px"></p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-secondary" id="confirm-no"  style="min-width:100px">No, cancelar</button>
+      <button class="btn btn-primary"   id="confirm-yes" style="min-width:100px">Sí, continuar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Ver foto ═══════════════════════════════ -->
+<div class="modal-overlay" id="modal-photo-view">
+  <div class="modal" style="max-width:600px;padding:12px;background:#000;border-radius:var(--radius-xl)">
+    <button class="modal-close" data-close="modal-photo-view" style="background:rgba(255,255,255,0.2);color:#fff;top:12px;right:12px">×</button>
+    <img id="photo-modal-img" src="" alt="" style="width:100%;border-radius:var(--radius-lg);max-height:70vh;object-fit:contain"/>
+    <div id="photo-modal-caption" style="color:#fff;font-size:13px;text-align:center;margin-top:10px;padding:0 8px"></div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Subir foto ════════════════════════════ -->
+<div class="modal-overlay" id="modal-upload-photo">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" data-close="modal-upload-photo">×</button>
+    <div class="modal-title">📸 Subir foto</div>
+    <div class="form-group">
+      <label class="form-label">Foto *</label>
+      <input type="file" id="photo-file" accept="image/*" class="form-input" style="padding:8px"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descripción (opcional)</label>
+      <input class="form-input" id="photo-caption" placeholder="Partido vs Los Tigres, gol de Pérez..."/>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" data-close="modal-upload-photo">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirm-upload">Subir foto</button>
     </div>
   </div>
 </div>
