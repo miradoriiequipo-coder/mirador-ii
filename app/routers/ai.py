@@ -49,6 +49,7 @@ def _generate_with_image(prompt: str, mime_type: str, image_data: bytes) -> str:
 
 def _get_tournament_context(tid: Optional[int], db: Session) -> dict:
     from sqlalchemy.orm import joinedload
+    from datetime import datetime
     if tid:
         t = db.query(models.Tournament).filter(models.Tournament.id == tid).first()
     else:
@@ -74,10 +75,34 @@ def _get_tournament_context(tid: Optional[int], db: Session) -> dict:
         deudas      = [d for d in p.deudas if d.tournament_id == t.id]
         pagos       = [pay for pay in p.payments if pay.tournament_id == t.id]
         deuda_total = sum(d.monto for d in deudas)
-        pagado      = sum(pay.amount for pay in pagos)
+        pagado      = sum(pay.amount for pay in pagos if pay.amount > 0)
+        ajustes_neg = sum(abs(pay.amount) for pay in pagos if pay.amount < 0)
+        saldo       = max(0, deuda_total - pagado + ajustes_neg)
+
+        # Historial detallado de movimientos
+        movimientos = []
+        for d in sorted(deudas, key=lambda x: x.created_at or datetime.min):
+            movimientos.append({
+                "tipo":     "deuda",
+                "concepto": d.concepto or d.tipo,
+                "monto":    round(d.monto, 2),
+                "fecha":    d.created_at.strftime("%d/%m/%Y") if d.created_at else "—",
+            })
+        for pay in sorted(pagos, key=lambda x: (x.payment_date or x.created_at or datetime.min)):
+            movimientos.append({
+                "tipo":     "pago" if pay.amount > 0 else "ajuste_negativo",
+                "concepto": pay.notes or pay.payment_type,
+                "monto":    round(pay.amount, 2),
+                "fecha":    (pay.payment_date or pay.created_at).strftime("%d/%m/%Y") if (pay.payment_date or pay.created_at) else "—",
+            })
+
         finances.append({
-            "jugador": p.full_name, "numero": p.player_number,
-            "deuda_total": deuda_total, "pagado": pagado, "pendiente": deuda_total - pagado,
+            "jugador":       p.full_name,
+            "numero":        p.player_number,
+            "deuda_total":   round(deuda_total, 2),
+            "pagado":        round(pagado, 2),
+            "saldo_pendiente": round(saldo, 2),
+            "historial":     movimientos,
         })
 
     # Goleadores acumulados del torneo
@@ -122,28 +147,24 @@ def _get_tournament_context(tid: Optional[int], db: Session) -> dict:
 
 
 # ── PARSER DIRECTO DEL EXCEL DE MIRADOR II ────────────────────────
-def _to_num(val) -> int:
-    """Convierte valores del Excel de Mirador a entero en pesos."""
+def _to_num(val) -> float:
+    """Convierte valores del Excel a float exacto en pesos."""
     if val is None or val == '-' or val == '':
-        return 0
+        return 0.0
     if isinstance(val, str):
-        val = val.replace('.', '').replace(',', '').strip()
+        if val.startswith('='):
+            return 0.0
+        val = val.replace(',', '.').strip()
         try:
-            return int(float(val))
+            return float(val)
         except:
-            return 0
-    if isinstance(val, float):
-        # 56.552 en formato colombiano = 56,552 pesos
-        if val < 1000:
-            return int(round(val * 1000))
-        return int(round(val))
-    if isinstance(val, int):
-        return val
-    return 0
+            return 0.0
+    if isinstance(val, (float, int)):
+        return float(val)
+    return 0.0
 
 
 def _limpiar_nombre(nombre: str) -> str:
-    """Quita el número de camiseta si está pegado al inicio del nombre."""
     nombre = nombre.strip()
     partes = nombre.split(' ', 1)
     if partes[0].replace('.', '').isdigit() and len(partes) > 1:
@@ -153,30 +174,36 @@ def _limpiar_nombre(nombre: str) -> str:
 
 def parse_mirador_excel(content: bytes) -> dict:
     """
-    Lee el Excel de Mirador II directamente.
-    Columnas relevantes (0-indexed):
+    Lee el Excel de Mirador II con data_only=True para obtener
+    valores calculados en vez de fórmulas.
+
+    Columnas (0-indexed):
       1  → # camiseta
       2  → nombre
-      3  → inscripción total
-      5  → inscripción abono
-      9  → arb fase 1 total
-      11 → arb fase 1 abono
-      15 → arb fase 2 total
-      17 → arb fase 2 abono
-      21 → arb fase 3 total
-      23 → arb fase 3 abono
+      3  → inscripción total (fórmula calculada)
+      4  → inscripción abono
+      6  → arb F1 total (fórmula calculada)
+      7  → arb F1 abono
+      9  → arb F2 total (fórmula calculada)
+      10 → arb F2 abono
+      12 → arb F3 total (fórmula calculada)
+      13 → arb F3 abono
+      16 → TOTAL PAGADO (efectivo real recibido)
+      17 → TOTAL X PERSONA (total que debe pagar)
+      18 → TOTAL DEBE (lo que falta)
     """
     import openpyxl
-    wb = openpyxl.load_workbook(io.BytesIO(content))
+    # data_only=True lee valores calculados, no fórmulas
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
 
-    jugadores = []
-    retirados = []
+    jugadores  = []
+    retirados  = []
     en_retirados = False
 
     for i, row in enumerate(rows):
-        if i < 4:          # saltar encabezados
+        if i < 3:  # saltar filas 1-3 (título y encabezados)
             continue
 
         # Detectar sección de retirados
@@ -185,25 +212,40 @@ def parse_mirador_excel(content: bytes) -> dict:
             en_retirados = True
             continue
 
+        # Saltar filas de configuración (tienen texto como "# JUGADORES", "ARBITRAJE", etc.)
+        PALABRAS_CONFIG = ["JUGADORES", "ARBITRAJE", "VALOR", "CANTIDAD", "TOTAL ARBITRAJE",
+                           "TOTAL TORNEO", "RECAUDO", "SALDO", "ABONO INSCRIPCION", "PAGOS"]
+        if any(p in texto_fila.upper() for p in PALABRAS_CONFIG):
+            continue
+
         nombre_raw = row[2] if len(row) > 2 else None
         if not nombre_raw or not isinstance(nombre_raw, str) or not nombre_raw.strip():
             continue
 
         nombre = _limpiar_nombre(nombre_raw)
         numero_raw = row[1] if len(row) > 1 else None
-        numero = int(numero_raw) if numero_raw and isinstance(numero_raw, (int, float)) else 0
+        numero = int(round(numero_raw)) if numero_raw and isinstance(numero_raw, (int, float)) else 0
 
         def col(idx):
             return row[idx] if len(row) > idx else None
 
         insc_total  = _to_num(col(3))
-        insc_abono  = _to_num(col(5))
-        arb1_total  = _to_num(col(9))
-        arb1_abono  = _to_num(col(11))
-        arb2_total  = _to_num(col(15))
-        arb2_abono  = _to_num(col(17))
-        arb3_total  = _to_num(col(21))
-        arb3_abono  = _to_num(col(23))
+        insc_abono  = _to_num(col(4))
+        arb1_total  = _to_num(col(6))
+        arb1_abono  = _to_num(col(7))
+        arb2_total  = _to_num(col(9))
+        arb2_abono  = _to_num(col(10))
+        arb3_total  = _to_num(col(12))
+        arb3_abono  = _to_num(col(13))
+        total_pagado = _to_num(col(16))
+        total_x_persona = _to_num(col(17))
+
+        # Calcular debe por concepto
+        insc_debe  = max(0, insc_total  - insc_abono)
+        arb1_debe  = max(0, arb1_total  - arb1_abono)
+        arb2_debe  = max(0, arb2_total  - arb2_abono)
+        arb3_debe  = max(0, arb3_total  - arb3_abono)
+        total_debe = max(0, total_x_persona - total_pagado)
 
         jugador = {
             "numero":  numero,
@@ -212,26 +254,27 @@ def parse_mirador_excel(content: bytes) -> dict:
             "inscripcion": {
                 "total": insc_total,
                 "abono": insc_abono,
-                "debe":  max(0, insc_total - insc_abono),
+                "debe":  insc_debe,
             },
             "arb_f1": {
                 "total": arb1_total,
                 "abono": arb1_abono,
-                "debe":  max(0, arb1_total - arb1_abono),
+                "debe":  arb1_debe,
             },
             "arb_f2": {
                 "total": arb2_total,
                 "abono": arb2_abono,
-                "debe":  max(0, arb2_total - arb2_abono),
+                "debe":  arb2_debe,
             },
             "arb_f3": {
                 "total": arb3_total,
                 "abono": arb3_abono,
-                "debe":  max(0, arb3_total - arb3_abono),
+                "debe":  arb3_debe,
             },
+            "total_abono":   total_pagado,
+            "total_debe":    total_debe,
+            "total_persona": total_x_persona,
         }
-        jugador["total_abono"] = insc_abono + arb1_abono + arb2_abono + arb3_abono
-        jugador["total_debe"]  = jugador["inscripcion"]["debe"] + jugador["arb_f1"]["debe"] + jugador["arb_f2"]["debe"] + jugador["arb_f3"]["debe"]
 
         if en_retirados:
             retirados.append(jugador)
@@ -390,7 +433,7 @@ REGLAS:
         raise HTTPException(status_code=500, detail=f"Error procesando archivo: {str(e)}")
 
 
-# ── 4. IMPORTAR FINANZAS COMPLETAS ────────────────────────────────
+# ── 4. IMPORTAR FINANZAS COMPLETAS (SYNC TOTAL) ──────────────────
 @router.post("/import-finances")
 def import_finances(
     body: dict,
@@ -429,12 +472,12 @@ def import_finances(
     for j in todos:
         try:
             nombre = str(j.get("nombre", "")).strip()
-            numero = int(j.get("numero", 0))
+            numero = int(j.get("numero", 0)) if j.get("numero") else 0
             estado = j.get("estado", "activo")
             if not nombre:
                 continue
 
-            # Buscar jugador existente
+            # Buscar jugador existente por número o nombre
             player = None
             if numero:
                 player = db.query(models.Player).filter(
@@ -442,75 +485,90 @@ def import_finances(
                     models.Player.player_number == numero,
                 ).first()
             if not player:
-                player = db.query(models.Player).filter(
-                    models.Player.tournament_id == tid,
-                    models.Player.full_name.ilike(f"%{nombre[:8]}%"),
-                ).first()
+                # Buscar por primeras palabras del nombre
+                palabras = nombre.split()[:2]
+                for palabra in palabras:
+                    if len(palabra) > 3:
+                        player = db.query(models.Player).filter(
+                            models.Player.tournament_id == tid,
+                            models.Player.full_name.ilike(f"%{palabra}%"),
+                        ).first()
+                        if player:
+                            break
 
             if player:
+                # Actualizar datos básicos
                 player.full_name = nombre
                 if numero:
                     player.player_number = numero
                 actualizados += 1
             else:
+                # Crear jugador nuevo
                 player = models.Player(
                     tournament_id=tid,
                     full_name=nombre,
                     player_number=numero,
-                    id_number=f"XLS-{tid}-{numero or nombre[:6]}",
+                    id_number=f"XLS-{tid}-{numero or nombre[:6].replace(' ','')}",
                     status="inactivo" if estado == "retirado" else "activo",
                 )
                 db.add(player)
                 db.flush()
                 creados += 1
 
-            # Deudas y pagos por concepto
+            # ── SYNC TOTAL: borrar todo lo importado de Excel anteriormente ──
+            deudas_excel = db.query(models.Deuda).filter(
+                models.Deuda.player_id == player.id,
+                models.Deuda.config_tipo.like("xls_%"),
+            ).all()
+            for d in deudas_excel:
+                db.delete(d)
+
+            pagos_excel = db.query(models.Payment).filter(
+                models.Payment.player_id == player.id,
+                models.Payment.notes.like("% (Excel)"),
+            ).all()
+            for p in pagos_excel:
+                db.delete(p)
+
+            db.flush()
+
+            # ── Insertar datos actualizados ──
             for key, concepto, fase in CONCEPTOS:
                 blk   = j.get(key, {})
-                total = int(blk.get("total", 0))
-                abono = int(blk.get("abono", 0))
+                total = float(blk.get("total", 0) or 0)
+                abono = float(blk.get("abono", 0) or 0)
 
-                tag = f"xls_{key}"  # identificador único
+                tag = f"xls_{key}"
 
                 if total > 0:
-                    existe_deuda = db.query(models.Deuda).filter(
-                        models.Deuda.player_id == player.id,
-                        models.Deuda.config_tipo == tag,
-                    ).first()
-                    if not existe_deuda:
-                        db.add(models.Deuda(
-                            tournament_id=tid,
-                            player_id=player.id,
-                            tipo="inscripcion" if key == "inscripcion" else "arbitraje",
-                            fase=fase,
-                            monto=total,
-                            concepto=concepto,
-                            config_tipo=tag,
-                        ))
+                    db.add(models.Deuda(
+                        tournament_id=tid,
+                        player_id=player.id,
+                        tipo="inscripcion" if key == "inscripcion" else "arbitraje",
+                        fase=fase,
+                        monto=total,
+                        concepto=concepto,
+                        config_tipo=tag,
+                    ))
 
                 if abono > 0:
-                    existe_pago = db.query(models.Payment).filter(
-                        models.Payment.player_id == player.id,
-                        models.Payment.notes == f"{concepto} (Excel)",
-                    ).first()
-                    if not existe_pago:
-                        db.add(models.Payment(
-                            tournament_id=tid,
-                            player_id=player.id,
-                            payment_type="inscripcion" if key == "inscripcion" else "arbitraje",
-                            amount=abono,
-                            notes=f"{concepto} (Excel)",
-                        ))
+                    db.add(models.Payment(
+                        tournament_id=tid,
+                        player_id=player.id,
+                        payment_type="inscripcion" if key == "inscripcion" else "arbitraje",
+                        amount=abono,
+                        notes=f"{concepto} (Excel)",
+                    ))
 
         except Exception as e:
             errores.append(f"{j.get('nombre','?')}: {str(e)}")
 
     db.commit()
     return {
-        "message":    f"Importación completada: {creados} creados, {actualizados} actualizados",
-        "creados":    creados,
+        "message":      f"✅ Sincronización completa: {creados} jugadores nuevos, {actualizados} actualizados",
+        "creados":      creados,
         "actualizados": actualizados,
-        "errores":    errores,
+        "errores":      errores,
     }
 
 

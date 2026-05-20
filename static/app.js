@@ -871,41 +871,137 @@ function renderFinancesTable(finances) {
         </div>
         <span style="font-size:12px;color:${color};font-weight:700;white-space:nowrap">${estado}</span>
       </div></td>
-      <td><button class="btn-expand" onclick="togglePaymentDetail(${p.player_id})">Ver detalle</button></td>
+      <td><button class="btn-expand" onclick="togglePlayerHistory(${p.player_id})">Ver historial</button></td>
     </tr>
     <tr class="payment-detail-row" id="detail-${p.player_id}" style="display:none">
-      <td colspan="6"><div class="payment-detail-inner">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <div>
-            <div class="form-label" style="margin-bottom:8px">Deudas asignadas
-              ${state.isAdmin&&!isViewingPast()&&p.status!=='inactivo'?`<button onclick="openDeudaManualModal(${p.player_id})" style="font-size:10px;padding:2px 8px;margin-left:8px;background:var(--navy);color:#fff;border:none;border-radius:3px;cursor:pointer">+ Deuda</button>`:''}
-            </div>
-            ${p.deudas.length?p.deudas.map(d=>`
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border-light)">
-                <div><span class="payment-badge ${d.tipo}">${d.tipo}</span>${d.fase?`<span style="color:var(--text-faint);margin-left:6px">${d.fase}</span>`:''}
-                  <div style="color:var(--text-faint);font-size:11px">${d.concepto||''}</div></div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <strong style="color:var(--navy)">${fmt(d.monto)}</strong>
-                  ${state.isAdmin&&!isViewingPast()?`<button onclick="deleteDeuda(${d.id})" style="font-size:11px;padding:1px 6px;background:var(--red-bg);color:var(--red);border:none;border-radius:3px;cursor:pointer">×</button>`:''}
-                </div>
-              </div>`).join(''):'<div style="color:var(--text-faint);font-size:13px">Sin deudas</div>'}
-          </div>
-          <div>
-            <div class="form-label" style="margin-bottom:8px">Pagos realizados</div>
-            ${p.payments.length?p.payments.map(pay=>`
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border-light)">
-                <div><span class="payment-badge ${pay.tipo}">${pay.tipo}</span>${pay.fase?`<span style="color:var(--text-faint);margin-left:6px">${pay.fase}</span>`:''}${pay.notas?`<span style="color:var(--text-faint);margin-left:6px">${pay.notas}</span>`:''}</div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <strong style="color:var(--green)">${fmt(pay.monto)}</strong>
-                  ${state.isAdmin&&!isViewingPast()?`<button onclick="deletePayment(${pay.id})" style="font-size:11px;padding:1px 6px;background:var(--red-bg);color:var(--red);border:none;border-radius:3px;cursor:pointer">×</button>`:''}
-                </div>
-              </div>`).join(''):'<div style="color:var(--text-faint);font-size:13px">Sin pagos</div>'}
-            ${state.isAdmin&&!isViewingPast()?`<button class="btn btn-primary" style="margin-top:10px;font-size:12px" onclick="openAddPaymentModal(${p.player_id})">+ Registrar pago</button>`:''}
-          </div>
+      <td colspan="6">
+        <div class="payment-detail-inner" id="history-content-${p.player_id}">
+          <div style="text-align:center;padding:20px;color:var(--text-faint)">Cargando historial...</div>
         </div>
-      </div></td>
+      </td>
     </tr>`;
   }).join('');
+}
+
+async function togglePlayerHistory(playerId) {
+  const row = $(`detail-${playerId}`);
+  const isOpen = row.style.display !== 'none';
+  // Cerrar todos
+  document.querySelectorAll('.payment-detail-row').forEach(r => r.style.display='none');
+  if (isOpen) return;
+  row.style.display = '';
+  await loadPlayerHistory(playerId);
+}
+
+async function loadPlayerHistory(playerId) {
+  const wrap = $(`history-content-${playerId}`);
+  try {
+    const tq = state.viewingTournament ? `?t=${state.viewingTournament.id}` : '';
+    const data = await api(`/finances/player/${playerId}/history${tq}`);
+    renderPlayerHistory(wrap, data, playerId);
+  } catch(e) {
+    wrap.innerHTML = `<div style="color:var(--red);padding:12px">Error: ${e.message}</div>`;
+  }
+}
+
+function renderPlayerHistory(wrap, data, playerId) {
+  const r = data.resumen;
+  const movs = data.movimientos || [];
+  const isAdmin = state.isAdmin && !isViewingPast();
+
+  const resumenHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text-faint)">Total deuda</div>
+        <div style="font-weight:700;color:var(--red)">${fmt(r.total_deuda)}</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:#e8f5e9;border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text-faint)">Total pagado</div>
+        <div style="font-weight:700;color:var(--green)">${fmt(r.total_pagado)}</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:${r.saldo_pendiente<=0?'#e8f5e9':'#fff3e0'};border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text-faint)">Saldo pendiente</div>
+        <div style="font-weight:700;color:${r.saldo_pendiente<=0?'var(--green)':'#e65100'}">${r.saldo_pendiente<=0?'✅ Paz y salvo':fmt(r.saldo_pendiente)}</div>
+      </div>
+    </div>`;
+
+  const movsHTML = movs.length ? `
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy)">📋 Historial de movimientos</div>
+    <div style="max-height:280px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--surface-low)">
+          <th style="padding:6px 8px;text-align:left">Fecha</th>
+          <th style="padding:6px 8px;text-align:left">Concepto</th>
+          <th style="padding:6px 8px;text-align:left">Fuente</th>
+          <th style="padding:6px 8px;text-align:right">Monto</th>
+          <th style="padding:6px 8px;text-align:center">Tipo</th>
+        </tr></thead>
+        <tbody>
+          ${movs.map((m,i) => {
+            const esDeuda = m.tipo === 'deuda';
+            const esNeg = m.monto < 0;
+            const iconos = {deuda:'🔴', pago:'🟢', ajuste_negativo:'🟠', ajuste:'🟡'};
+            return `<tr style="border-bottom:1px solid var(--border-light);background:${i%2===0?'':'var(--surface-low)'}">
+              <td style="padding:5px 8px;font-family:monospace;font-size:11px">${m.fecha}</td>
+              <td style="padding:5px 8px">${m.concepto||''}</td>
+              <td style="padding:5px 8px"><span style="font-size:10px;background:${m.fuente==='Excel'?'#e3f2fd':'#f3e5f5'};border-radius:3px;padding:1px 5px">${m.fuente}</span></td>
+              <td style="padding:5px 8px;text-align:right;font-weight:700;color:${esDeuda?'var(--red)':esNeg?'#e65100':'var(--green)'}">${esDeuda?'+':esNeg?'±':'–'} ${fmt(Math.abs(m.monto))}</td>
+              <td style="padding:5px 8px;text-align:center">${iconos[m.tipo]||'⚪'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : '<div style="color:var(--text-faint);font-size:13px;padding:8px 0">Sin movimientos registrados</div>';
+
+  const ajusteHTML = isAdmin ? `
+    <div style="margin-top:14px;border-top:1px solid var(--border-light);padding-top:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--navy)">➕ Registrar movimiento</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:2;min-width:140px">
+          <label class="form-label">Concepto *</label>
+          <input class="form-input" id="adj-concepto-${playerId}" placeholder="Ej: Abono partido 3, Multa, Corrección..." style="font-size:13px"/>
+        </div>
+        <div style="flex:1;min-width:110px">
+          <label class="form-label">Monto *</label>
+          <input class="form-input" id="adj-monto-${playerId}" type="number" placeholder="50000" style="font-size:13px"/>
+        </div>
+        <div style="flex:1;min-width:110px">
+          <label class="form-label">Fecha</label>
+          <input class="form-input" id="adj-fecha-${playerId}" type="date" value="${new Date().toISOString().split('T')[0]}" style="font-size:13px"/>
+        </div>
+        <div style="flex:1;min-width:100px">
+          <label class="form-label">Tipo</label>
+          <select class="form-input" id="adj-tipo-${playerId}" style="font-size:13px">
+            <option value="pago">💚 Abono/Pago</option>
+            <option value="cargo">🔴 Cargo adicional</option>
+            <option value="ajuste">🟠 Ajuste/Corrección</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="font-size:13px;white-space:nowrap" onclick="saveAdjustment(${playerId})">Guardar</button>
+      </div>
+    </div>` : '';
+
+  wrap.innerHTML = resumenHTML + movsHTML + ajusteHTML;
+}
+
+async function saveAdjustment(playerId) {
+  const concepto = $(`adj-concepto-${playerId}`)?.value?.trim();
+  const monto    = parseFloat($(`adj-monto-${playerId}`)?.value || '0');
+  const fecha    = $(`adj-fecha-${playerId}`)?.value;
+  const tipo     = $(`adj-tipo-${playerId}`)?.value;
+
+  if (!concepto) { toast('Escribe un concepto', 'warning'); return; }
+  if (!monto || monto <= 0) { toast('El monto debe ser mayor a 0', 'warning'); return; }
+
+  try {
+    const tq = state.viewingTournament ? `?t=${state.viewingTournament.id}` : '';
+    const res = await api(`/finances/adjustment${tq}`, 'POST', {
+      player_id: playerId, concepto, monto, fecha, tipo,
+    });
+    toast(res.message);
+    await loadPlayerHistory(playerId);
+    loadPayments();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function togglePaymentDetail(id){ const r=$(`detail-${id}`); r.style.display=r.style.display==='none'?'':'none'; }

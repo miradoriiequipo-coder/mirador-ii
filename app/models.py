@@ -99,6 +99,7 @@ class Payment(Base):
     phase = Column(String, nullable=True)
     amount = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
+    payment_date = Column(DateTime, server_default=func.now())
     created_at = Column(DateTime, server_default=func.now())
 
     player = relationship("Player", back_populates="payments")

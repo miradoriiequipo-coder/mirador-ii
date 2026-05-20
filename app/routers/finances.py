@@ -281,3 +281,136 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user=
     db.delete(payment)
     db.commit()
     return {"message": "Pago eliminado"}
+
+
+# ── HISTORIAL DE MOVIMIENTOS POR JUGADOR ─────────────────────────
+@router.get("/player/{player_id}/history")
+def player_history(
+    player_id: int,
+    t: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    player = db.query(models.Player).filter(models.Player.id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+
+    tid = _get_tid(t, db)
+
+    # Deudas (lo que debe)
+    deudas = db.query(models.Deuda).filter(
+        models.Deuda.player_id == player_id,
+        models.Deuda.tournament_id == tid,
+    ).order_by(models.Deuda.created_at).all()
+
+    # Pagos y ajustes (lo que ha pagado)
+    pagos = db.query(models.Payment).filter(
+        models.Payment.player_id == player_id,
+        models.Payment.tournament_id == tid,
+    ).order_by(models.Payment.payment_date).all()
+
+    # Construir línea de tiempo unificada
+    movimientos = []
+
+    for d in deudas:
+        movimientos.append({
+            "id":       d.id,
+            "tipo":     "deuda",
+            "concepto": d.concepto or d.tipo,
+            "fase":     d.fase,
+            "monto":    d.monto,
+            "fecha":    d.created_at.strftime("%d/%m/%Y") if d.created_at else "—",
+            "fuente":   "Excel" if (d.config_tipo or "").startswith("xls_") else "Manual",
+            "color":    "red",
+        })
+
+    for p in pagos:
+        es_ajuste   = p.payment_type == "ajuste"
+        es_negativo = p.amount < 0
+        movimientos.append({
+            "id":       p.id,
+            "tipo":     "ajuste" if es_ajuste else "pago",
+            "concepto": p.notes or p.payment_type,
+            "fase":     p.phase,
+            "monto":    p.amount,
+            "fecha":    (p.payment_date or p.created_at).strftime("%d/%m/%Y") if (p.payment_date or p.created_at) else "—",
+            "fuente":   "Excel" if "(Excel)" in (p.notes or "") else "Manual",
+            "color":    "orange" if es_negativo else "green",
+        })
+
+    # Ordenar por fecha
+    movimientos.sort(key=lambda x: x["fecha"])
+
+    total_deuda  = sum(d.monto for d in deudas)
+    total_pagado = sum(p.amount for p in pagos if p.amount > 0)
+    total_ajustes_neg = sum(abs(p.amount) for p in pagos if p.amount < 0)
+    saldo_pendiente = total_deuda - total_pagado + total_ajustes_neg
+
+    return {
+        "jugador":    {"id": player.id, "nombre": player.full_name, "numero": player.player_number},
+        "resumen":    {
+            "total_deuda":     total_deuda,
+            "total_pagado":    total_pagado,
+            "saldo_pendiente": max(0, saldo_pendiente),
+        },
+        "movimientos": movimientos,
+    }
+
+
+# ── AJUSTE MANUAL (positivo = cargo adicional, negativo = abono/crédito) ──
+@router.post("/adjustment")
+def add_adjustment(
+    body: dict,
+    t: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    from datetime import datetime
+    tid = _get_tid(t, db)
+    player_id   = int(body.get("player_id", 0))
+    monto       = float(body.get("monto", 0))
+    concepto    = body.get("concepto", "").strip()
+    tipo_ajuste = body.get("tipo", "pago")  # "pago" | "cargo" | "ajuste"
+    fecha_str   = body.get("fecha", "")
+
+    if not player_id or monto == 0 or not concepto:
+        raise HTTPException(status_code=400, detail="Jugador, monto y concepto son obligatorios")
+
+    player = db.query(models.Player).filter(models.Player.id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+
+    # Fecha del ajuste (hoy si no se especifica)
+    fecha = datetime.now()
+    if fecha_str:
+        try:
+            fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
+        except:
+            pass
+
+    if tipo_ajuste == "cargo":
+        # Cargo adicional → nueva deuda
+        db.add(models.Deuda(
+            tournament_id=tid,
+            player_id=player_id,
+            tipo="ajuste",
+            monto=abs(monto),
+            concepto=concepto,
+            config_tipo="ajuste_manual",
+        ))
+        msg = f"Cargo de ${abs(monto):,.0f} registrado para {player.full_name}"
+    else:
+        # Pago o abono → payment positivo
+        # Ajuste negativo → payment negativo (corrección/crédito)
+        amount = abs(monto) if tipo_ajuste == "pago" else -abs(monto)
+        db.add(models.Payment(
+            tournament_id=tid,
+            player_id=player_id,
+            payment_type="ajuste",
+            amount=amount,
+            notes=concepto,
+            payment_date=fecha,
+        ))
+        msg = f"{'Abono' if amount > 0 else 'Ajuste'} de ${abs(amount):,.0f} registrado para {player.full_name}"
+
+    db.commit()
+    return {"message": msg}
