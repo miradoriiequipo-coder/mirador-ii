@@ -355,14 +355,14 @@ function renderBulletinBanner(data) {
 
   // ── PROGRAMACIÓN ──
   if (PR.length) {
-    const gruposPR = [...new Set(PR.map(r => r.grupo))].sort();
-    const contenidoPR = gruposPR.map(g => {
+    const gruposPR = [...new Set(PR.map(r => r.grupo).filter(g => g && g !== 'null'))].sort();
+    const contenidoPR = gruposPR.length ? gruposPR.map(g => {
       const filas = PR.filter(r => r.grupo === g);
       return `<div style="margin-bottom:8px">
         <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px">GRUPO ${g}</div>
         ${filas.map(r => filaPartido(r.local, r.visitante, r.hora, r.tiene_mirador)).join('')}
       </div>`;
-    }).join('');
+    }).join('') : PR.map(r => filaPartido(r.local, r.visitante, r.hora, r.tiene_mirador)).join('');
     html += sec('📅', `Programación ${data.proxima_fecha ? '— '+data.proxima_fecha : ''}`, contenidoPR);
   }
 
@@ -428,10 +428,14 @@ async function handleTournamentPDF(input) {
     if (!res.ok) throw new Error(json.detail || 'Error');
     const data = json.data;
 
-    // Guardar en localStorage para el banner del inicio
-    // Si el nuevo boletín no trae próximo partido, limpiar el anterior
+    // Guardar en localStorage Y en el servidor (para todos los dispositivos)
     if (!data.proximo_partido_mirador?.rival) data.proximo_partido_mirador = null;
     const stored = { ...data, _fecha: new Date().toLocaleDateString('es-CO', {day:'numeric',month:'short'}) };
+    localStorage.setItem('miradorBulletin', JSON.stringify(stored));
+    // Guardar en servidor para que aparezca en todos los dispositivos
+    try {
+      await api(`/tournaments/bulletin${tParam()}`, 'POST', stored);
+    } catch(e) { /* silencioso — localStorage ya lo tiene */ }
     localStorage.setItem('miradorBulletin', JSON.stringify(stored));
 
     // Actualizar el inicio con el nuevo boletín
@@ -622,20 +626,36 @@ async function loadHome() {
     $('last-result-wrap').innerHTML = ''; $('vote-section').innerHTML = '';
     return;
   }
-  // Cargar boletín del localStorage (solo si tiene el nuevo formato)
+  // Cargar boletín: primero del servidor, fallback a localStorage
   try {
-    const stored = localStorage.getItem('miradorBulletin');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Validar que sea el nuevo formato (tiene resultados como array)
-      if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
-        renderBulletinBanner(parsed);
-      } else {
-        // Formato viejo — borrar para no romper la app
-        localStorage.removeItem('miradorBulletin');
+    const serverBulletin = await api(`/tournaments/bulletin${tParam()}`);
+    if (serverBulletin && (Array.isArray(serverBulletin.resultados) || Array.isArray(serverBulletin.fair_play))) {
+      localStorage.setItem('miradorBulletin', JSON.stringify(serverBulletin));
+      renderBulletinBanner(serverBulletin);
+    } else {
+      // Fallback a localStorage si el servidor no tiene boletín
+      const stored = localStorage.getItem('miradorBulletin');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
+          renderBulletinBanner(parsed);
+        }
       }
     }
-  } catch(e) { localStorage.removeItem('miradorBulletin'); }
+  } catch(e) {
+    // Fallback silencioso a localStorage
+    try {
+      const stored = localStorage.getItem('miradorBulletin');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
+          renderBulletinBanner(parsed);
+        } else {
+          localStorage.removeItem('miradorBulletin');
+        }
+      }
+    } catch(e2) { localStorage.removeItem('miradorBulletin'); }
+  }
 
   loadHomeGallery();
 

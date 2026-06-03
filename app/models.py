@@ -11,6 +11,7 @@ class Tournament(Base):
     season = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+    bulletin_data = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     closed_at = Column(DateTime, nullable=True)
 

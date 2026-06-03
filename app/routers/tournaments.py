@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
+import json
 from .. import models
 from ..database import get_db
 from ..auth import require_admin
@@ -114,3 +115,38 @@ def get_tournament_stats(tournament_id: int, db: Session = Depends(get_db)):
         "goals_against": goals_against,
         "total_recaudado": total_recaudado,
     }
+
+
+# ── BOLETÍN DEL TORNEO ────────────────────────────────────────────
+@router.get("/bulletin")
+def get_bulletin(t: int = None, db: Session = Depends(get_db)):
+    """Retorna el último boletín guardado del torneo activo."""
+    if t:
+        tournament = db.query(models.Tournament).filter(models.Tournament.id == t).first()
+    else:
+        tournament = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
+    if not tournament or not tournament.bulletin_data:
+        return None
+    try:
+        return json.loads(tournament.bulletin_data)
+    except:
+        return None
+
+
+@router.post("/bulletin")
+def save_bulletin(
+    body: dict,
+    t: int = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    """Guarda el boletín en la base de datos del torneo."""
+    if t:
+        tournament = db.query(models.Tournament).filter(models.Tournament.id == t).first()
+    else:
+        tournament = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Torneo no encontrado")
+    tournament.bulletin_data = json.dumps(body)
+    db.commit()
+    return {"success": True}
