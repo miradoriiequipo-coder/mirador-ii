@@ -16,6 +16,7 @@ const state = {
   sliderIdx:  0,
   upcomingMatches: [],
   lastMatch:  null,
+  matchVotes: {},
   tournaments:       [],
   activeTournament:  null,
   viewingTournament: null,
@@ -260,36 +261,154 @@ async function loadHomeGallery() {
 }
 
 // ── BULLETIN BANNER ──────────────────────────────────────────────
+// ── BOLETÍN ────────────────────────────────────────────────────
 function renderBulletinBanner(data) {
   const banner = $('bulletin-banner');
   if (!data || !banner) return;
-  const items = [];
-  if (data.fair_play?.es_ganador) {
-    items.push(`🏆 <strong>¡FAIR PLAY GANADOR!</strong> ${data.fair_play.puntos} pts`);
-  } else if (data.fair_play?.posicion <= 3) {
-    items.push(`🎖️ Top ${data.fair_play.posicion} Fair Play · ${data.fair_play.puntos} pts`);
-  }
-  if (data.valla_menos_vencida?.posicion <= 3) {
-    items.push(`🧤 Top ${data.valla_menos_vencida.posicion} Valla Menos Vencida · ${data.valla_menos_vencida.goles_contra} goles en contra`);
-  }
-  if (data.proximo_partido?.rival) {
-    const pp = data.proximo_partido;
-    items.push(`📅 Próximo: ${pp.es_local?'MIRADOR II vs '+pp.rival:pp.rival+' vs MIRADOR II'} · ${pp.hora} · ${pp.lugar||''}`);
-  }
-  if (!items.length) return;
 
-  const colors = ['#1a3a6e','#1e4a8a','#0f2d5a'];
-  banner.style.display = 'block';
-  banner.innerHTML = `
-    <div style="background:var(--navy);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:4px">
-      <div style="background:var(--lime);padding:6px 16px;font-family:'Oswald',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--navy)">
-        📋 Boletín ${data._fecha||'del torneo'}
+  const R  = Array.isArray(data.resultados)           ? data.resultados           : [];
+  const PR = Array.isArray(data.programacion)          ? data.programacion          : [];
+  const VM = Array.isArray(data.valla_menos_vencida)   ? data.valla_menos_vencida   : [];
+  const FP = Array.isArray(data.fair_play)             ? data.fair_play             : [];
+  const CR = Array.isArray(data.cronograma)            ? data.cronograma            : [];
+  const pp = data.proximo_partido_mirador;
+  const fase = data.fase_actual || '';
+
+  if (!R.length && !PR.length && !FP.length) return;
+
+  // ─ helpers ─
+  const sec = (icon, titulo, contenido) => `
+    <div style="border-bottom:1px solid var(--border-light)">
+      <div style="background:var(--navy);padding:7px 14px;display:flex;align-items:center;gap:7px">
+        <span style="font-size:13px">${icon}</span>
+        <span style="font-family:'Oswald',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#fff">${titulo}</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:0">
-        ${items.map((item,i)=>`<div style="padding:10px 16px;font-size:13px;color:var(--on-navy);background:${colors[i%colors.length]};border-top:1px solid rgba(255,255,255,0.08)">${item}</div>`).join('')}
+      <div style="padding:10px 14px">${contenido}</div>
+    </div>`;
+
+  const marcador = (local, gl, gv, visitante, resaltado) => {
+    const borde = resaltado ? 'border-left:3px solid var(--lime)' : 'border-left:3px solid transparent';
+    return `<div style="display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;padding:6px 0;${borde};padding-left:${resaltado?'8px':'0'}">
+      <span style="font-size:11px;font-weight:${resaltado?700:400};text-align:right;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${local}</span>
+      <span style="font-family:'Oswald',sans-serif;font-size:15px;font-weight:700;color:var(--navy);text-align:center">${gl??'—'} — ${gv??'—'}</span>
+      <span style="font-size:11px;font-weight:${resaltado?700:400};color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${visitante}</span>
+    </div>`;
+  };
+
+  const filaPartido = (local, visitante, hora, resaltado) => {
+    const borde = resaltado ? 'border-left:3px solid var(--lime)' : 'border-left:3px solid transparent';
+    return `<div style="display:grid;grid-template-columns:1fr 50px 1fr;align-items:center;padding:6px 0;${borde};padding-left:${resaltado?'8px':'0'}">
+      <span style="font-size:11px;font-weight:${resaltado?700:400};text-align:right;color:var(--text)">${local}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--text-faint);text-align:center">${hora||'DOM'}</span>
+      <span style="font-size:11px;font-weight:${resaltado?700:400};color:var(--text)">${visitante}</span>
+    </div>`;
+  };
+
+  let html = `<div style="border-radius:var(--radius-lg);overflow:hidden;border:1.5px solid var(--navy);background:var(--surface)">`;
+
+  // ── CABECERA ──
+  const mirador_fp = FP.find(e => e.es_mirador);
+  const mirador_vm = VM.find(e => e.es_mirador);
+  html += `
+    <div style="background:var(--navy);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:700;color:#fff;letter-spacing:0.06em">COPA METROPOLITANA</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:1px">${fase}${data._fecha?' · '+data._fecha:''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+        ${mirador_fp?.es_ganador ? `<span style="background:var(--lime);color:var(--navy);font-family:'Oswald',sans-serif;font-size:10px;font-weight:700;padding:3px 9px;border-radius:3px">🏆 FAIR PLAY #1</span>` : mirador_fp ? `<span style="font-size:10px;color:var(--lime);background:rgba(193,241,0,0.12);padding:3px 9px;border-radius:3px;font-weight:600">🎖️ FP ${mirador_fp.puesto}° — ${mirador_fp.puntos}pts</span>` : ''}
+        ${mirador_vm ? `<span style="font-size:10px;color:rgba(255,255,255,0.5);padding:2px 0">🧤 Valla ${mirador_vm.puesto}° — ${mirador_vm.goles_contra} GC</span>` : ''}
       </div>
     </div>`;
+
+  // ── PRÓXIMO PARTIDO (solo si existe en el boletín actual) ──
+  if (pp?.rival && (pp.fecha_str || pp.hora || PR.some(p => p.tiene_mirador))) {
+    const rival = pp.es_local ? `MIRADOR II vs ${pp.rival.toUpperCase()}` : `${pp.rival.toUpperCase()} vs MIRADOR II`;
+    html += `
+      <div style="background:linear-gradient(135deg,#0d2a5e,#1a3f8a);padding:12px 14px;border-top:2px solid var(--lime)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--lime);font-weight:700;margin-bottom:5px">⚽ Nuestro próximo partido</div>
+        <div style="font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;color:#fff">${rival}</div>
+        <div style="display:flex;gap:14px;margin-top:5px;flex-wrap:wrap">
+          ${data.proxima_fecha ? `<span style="font-size:11px;color:rgba(255,255,255,0.7)">📆 ${data.proxima_fecha}</span>` : `<span style="font-size:11px;color:rgba(255,255,255,0.4);font-style:italic">📆 Fecha por confirmar</span>`}
+          ${pp.hora ? `<span style="font-size:11px;font-weight:700;color:var(--lime)">⏰ ${pp.hora}</span>` : ''}
+          ${pp.campo ? `<span style="font-size:11px;color:rgba(255,255,255,0.6)">📍 ${pp.campo}</span>` : ''}
+        </div>
+        ${state.isAdmin ? `<div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn btn-secondary" style="font-size:10px;padding:3px 10px" onclick="autoCrearPartidoPDF(${JSON.stringify(pp).replace(/"/g,'&quot;')})">⚡ Crear partido</button>
+          <button class="btn btn-secondary" style="font-size:10px;padding:3px 10px" onclick="preCargarPartidoPDF(${JSON.stringify(pp).replace(/"/g,'&quot;')})">✏️ Editar</button>
+        </div>` : ''}
+      </div>`;
+  }
+
+  // ── RESULTADOS ──
+  if (R.length) {
+    const gruposR = [...new Set(R.map(r => r.grupo))].sort();
+    const contenidoR = gruposR.map(g => {
+      const filas = R.filter(r => r.grupo === g);
+      return `<div style="margin-bottom:8px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px">GRUPO ${g}</div>
+        ${filas.map(r => marcador(r.local, r.goles_local, r.goles_visitante, r.visitante, r.tiene_mirador)).join('')}
+      </div>`;
+    }).join('');
+    html += sec('⚽', `Resultados ${data.fecha_juego ? '— '+data.fecha_juego : ''}`, contenidoR);
+  }
+
+  // ── PROGRAMACIÓN ──
+  if (PR.length) {
+    const gruposPR = [...new Set(PR.map(r => r.grupo))].sort();
+    const contenidoPR = gruposPR.map(g => {
+      const filas = PR.filter(r => r.grupo === g);
+      return `<div style="margin-bottom:8px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px">GRUPO ${g}</div>
+        ${filas.map(r => filaPartido(r.local, r.visitante, r.hora, r.tiene_mirador)).join('')}
+      </div>`;
+    }).join('');
+    html += sec('📅', `Programación ${data.proxima_fecha ? '— '+data.proxima_fecha : ''}`, contenidoPR);
+  }
+
+  // ── VALLA MENOS VENCIDA ──
+  if (VM.length) {
+    const filas = VM.map((e,i) => {
+      const esM = e.es_mirador;
+      return `<div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);${esM?'font-weight:700;':''}">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${e.puesto<=3?'var(--navy)':'var(--text-faint)'};width:22px">${e.puesto}°</span>
+        <span style="flex:1;font-size:12px;color:${esM?'var(--navy)':'var(--text)'}">${e.equipo}${esM?' ◀':''}</span>
+        <span style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:700;color:${e.puesto===1?'var(--navy)':'var(--text-faint)'}">${e.goles_contra}</span>
+      </div>`;
+    }).join('');
+    html += sec('🧤', 'Valla Menos Vencida', `<div>${filas}</div>`);
+  }
+
+  // ── FAIR PLAY ──
+  if (FP.length) {
+    const filas = FP.map(e => {
+      const esM = e.es_mirador;
+      return `<div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);${esM?'font-weight:700;background:rgba(193,241,0,0.06);margin:0 -14px;padding:5px 14px;':''}">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${e.puesto<=3?'var(--navy)':'var(--text-faint)'};width:22px">${e.puesto}°</span>
+        <span style="flex:1;font-size:12px;color:${esM?'var(--navy)':'var(--text)'}">${e.equipo}${e.es_ganador?' 🏆':''}</span>
+        <span style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:700;color:${esM?'var(--navy)':'var(--text-faint)'}">${e.puntos}</span>
+      </div>`;
+    }).join('');
+    html += sec('🎖️', 'Fair Play — Juego Limpio', `<div>${filas}</div>`);
+  }
+
+  // ── CRONOGRAMA ──
+  if (CR.length) {
+    const hoy = new Date();
+    const filas = CR.map(c => `
+      <div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border-light);align-items:center">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--navy);min-width:60px">${c.fecha}</span>
+        <span style="font-size:11px;color:var(--text)">${c.evento}</span>
+      </div>`).join('');
+    html += sec('📆', 'Cronograma', `<div>${filas}</div>`);
+  }
+
+  html += `</div>`;
+  banner.style.display = 'block';
+  banner.innerHTML = html;
 }
+
+
 
 // ── PDF TOURNAMENT READER ────────────────────────────────────────
 async function handleTournamentPDF(input) {
@@ -308,11 +427,34 @@ async function handleTournamentPDF(input) {
     const json = await res.json();
     if (!res.ok) throw new Error(json.detail || 'Error');
     const data = json.data;
+
     // Guardar en localStorage para el banner del inicio
+    // Si el nuevo boletín no trae próximo partido, limpiar el anterior
+    if (!data.proximo_partido_mirador?.rival) data.proximo_partido_mirador = null;
     const stored = { ...data, _fecha: new Date().toLocaleDateString('es-CO', {day:'numeric',month:'short'}) };
     localStorage.setItem('miradorBulletin', JSON.stringify(stored));
+
+    // Actualizar el inicio con el nuevo boletín
     renderBulletinBanner(stored);
     renderPDFResult(data);
+
+    // Auto-actualizar resultado si el partido existe sin resultado
+    const ur = data.ultimo_resultado_mirador;
+    if (ur?.rival && state.isAdmin) {
+      await autoActualizarResultadoPDF(ur);
+    }
+    // Auto-crear próximo partido si no existe
+    const pp2 = data.proximo_partido_mirador;
+    if (pp2?.rival && state.isAdmin) {
+      const existe = state.matches.find(m =>
+        !m.is_played && (
+          m.opponent.toLowerCase().includes(pp2.rival.toLowerCase().split(' ')[0]) ||
+          pp2.rival.toLowerCase().includes(m.opponent.toLowerCase().split(' ')[0])
+        )
+      );
+      if (!existe) await autoCrearPartidoPDF(pp2);
+      else if (pp2.hora) toast('💡 Partido ya existe. Si no tiene hora, edítalo manualmente.');
+    }
   } catch(e) {
     toast(e.message, 'error');
   } finally {
@@ -325,11 +467,10 @@ function renderPDFResult(data) {
   const wrap = $('pdf-result');
   wrap.style.display = 'block';
 
-  const pp  = data.proximo_partido;
-  const ur  = data.ultimo_resultado;
-  const fp  = data.fair_play;
-  const vmv = data.valla_menos_vencida;
-  const gr  = data.grupo;
+  const pp  = data.proximo_partido_mirador;
+  const ur  = data.ultimo_resultado_mirador;
+  const fp  = Array.isArray(data.fair_play) ? data.fair_play.find(e=>e.es_mirador) : null;
+  const vmv = Array.isArray(data.valla_menos_vencida) ? data.valla_menos_vencida.find(e=>e.es_mirador) : null;
   const cron= data.cronograma || [];
 
   // Tarjeta próximo partido
@@ -337,44 +478,31 @@ function renderPDFResult(data) {
     <div style="background:var(--navy);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px;color:var(--on-navy)">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--lime);font-weight:700;margin-bottom:8px">📅 Próximo Partido</div>
       <div style="font-size:17px;font-weight:700;font-family:'Oswald',sans-serif;margin-bottom:6px">${pp.es_local?'MIRADOR II vs '+pp.rival.toUpperCase():pp.rival.toUpperCase()+' vs MIRADOR II'}</div>
-      <div style="font-size:13px;opacity:0.8">${pp.fecha_str||''} · ${pp.hora||''}</div>
-      <div style="font-size:13px;opacity:0.8">📍 ${pp.lugar||''}</div>
-      <div style="font-size:12px;opacity:0.6;margin-top:4px">📌 ${pp.fase||''}</div>
+      <div style="font-size:13px;opacity:0.8">${pp.fecha_str||''} ${pp.hora?'· '+pp.hora:''}</div>
+      ${pp.campo?`<div style="font-size:13px;opacity:0.8">📍 ${pp.campo}</div>`:''}
       ${state.isAdmin?`<button class="btn btn-secondary" style="margin-top:12px;font-size:12px" onclick="preCargarPartidoPDF(${JSON.stringify(pp).replace(/"/g,'&quot;')})">➕ Agregar a la app</button>`:''}
     </div>` : '';
 
   // Último resultado
   const cardRes = ur?.rival ? `
     <div style="background:${ur.goles_mirador>ur.goles_rival?'#1a4a1a':ur.goles_mirador<ur.goles_rival?'#4a1a1a':'#3a3a1a'};border-radius:var(--radius-lg);padding:14px;margin-bottom:12px;color:#fff">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:${ur.goles_mirador>ur.goles_rival?'#7eff7e':ur.goles_mirador<ur.goles_rival?'#ff7e7e':'#ffe07e'};font-weight:700;margin-bottom:6px">⚽ Último Resultado · ${ur.fecha_str||''}</div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:${ur.goles_mirador>ur.goles_rival?'#7eff7e':ur.goles_mirador<ur.goles_rival?'#ff7e7e':'#ffe07e'};font-weight:700;margin-bottom:6px">⚽ Último Resultado</div>
       <div style="font-size:22px;font-weight:700;font-family:'Oswald',sans-serif;letter-spacing:0.05em">
         ${ur.es_local?`MIRADOR II ${ur.goles_mirador} — ${ur.goles_rival} ${ur.rival}`:
           `${ur.rival} ${ur.goles_rival} — ${ur.goles_mirador} MIRADOR II`}
       </div>
       <div style="font-size:13px;opacity:0.7;margin-top:4px">${ur.goles_mirador>ur.goles_rival?'✅ VICTORIA':ur.goles_mirador<ur.goles_rival?'❌ DERROTA':'🤝 EMPATE'}</div>
-      ${state.isAdmin?`<button class="btn btn-secondary" style="margin-top:10px;font-size:12px" onclick="preCargarResultadoPDF(${JSON.stringify(ur).replace(/"/g,'&quot;')})">✏️ Actualizar en la app</button>`:''}
     </div>` : '';
 
   // Logros
   const logros = [];
   if (fp?.es_ganador) logros.push(`🏆 <strong>FAIR PLAY GANADOR</strong> · ${fp.puntos} puntos`);
-  else if (fp?.puntos)  logros.push(`🎖️ Fair Play: puesto ${fp.posicion} · ${fp.puntos} pts`);
-  if (vmv?.goles_contra) logros.push(`🧤 Valla menos vencida: puesto ${vmv.posicion} · ${vmv.goles_contra} goles en contra`);
+  else if (fp?.puntos)  logros.push(`🎖️ Fair Play: puesto ${fp.puesto} · ${fp.puntos} pts`);
+  if (vmv?.goles_contra !== undefined) logros.push(`🧤 Valla menos vencida: puesto ${vmv.puesto} · ${vmv.goles_contra} goles en contra`);
   const cardLogros = logros.length ? `
     <div style="background:var(--surface-low);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px;margin-bottom:12px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);font-weight:700;margin-bottom:8px">🌟 Logros del torneo</div>
       ${logros.map(l=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--border-light)">${l}</div>`).join('')}
-    </div>` : '';
-
-  // Grupo
-  const cardGrupo = gr?.equipos ? `
-    <div style="background:var(--surface-low);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);font-weight:700;margin-bottom:8px">${gr.nombre||'Grupo'}</div>
-      ${gr.equipos.map(e=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-light);${e.equipo.includes('MIRADOR')? 'font-weight:700;color:var(--navy)':'' }">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;min-width:20px">${e.puesto}°</span>
-          <span style="font-size:13px">${e.equipo}${e.equipo.includes('MIRADOR')?' 👈':''}</span>
-        </div>`).join('')}
     </div>` : '';
 
   // Cronograma
@@ -384,7 +512,72 @@ function renderPDFResult(data) {
       ${cron.map(c=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:13px"><span style="font-weight:600;color:var(--navy)">${c.fecha}</span><span>${c.evento}</span></div>`).join('')}
     </div>` : '';
 
-  wrap.innerHTML = cardProx + cardRes + cardLogros + cardGrupo + cardCron;
+  wrap.innerHTML = cardProx + cardRes + cardLogros + cardCron;
+}
+
+// Auto-crear partido del PDF si no existe ya
+async function autoCrearPartidoPDF(pp) {
+  if (!pp?.rival) return;
+  // Buscar si ya existe ese partido
+  const existe = state.matches.find(m =>
+    m.opponent.toLowerCase().includes(pp.rival.toLowerCase().split(' ')[0].toLowerCase()) ||
+    pp.rival.toLowerCase().includes(m.opponent.toLowerCase().split(' ')[0].toLowerCase())
+  );
+  if (existe && !existe.is_played) {
+    toast(`Ya existe partido vs ${pp.rival}`, 'warning');
+    return;
+  }
+
+  // Parsear fecha si la tiene
+  const meses = {enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
+  let fecha_iso = null;
+  if (pp.fecha_str) {
+    const m = pp.fecha_str.match(/(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/i);
+    if (m) {
+      const mes = meses[m[2].toLowerCase()] || '01';
+      const hora = (pp.hora||'06:00').replace('AM','').replace('PM','').trim();
+      fecha_iso = `${m[3]}-${mes}-${m[1].padStart(2,'0')}T${hora.includes(':')?hora:'06:00'}`;
+    }
+  }
+
+  try {
+    const tq = state.viewingTournament ? `?t=${state.viewingTournament.id}` : '';
+    await api(`/matches${tq}`, 'POST', {
+      opponent: pp.rival,
+      match_date: fecha_iso || new Date().toISOString().slice(0,16),
+      location: pp.lugar || '',
+      phase: pp.fase || '',
+    });
+    toast(`✅ Partido vs ${pp.rival} creado${!fecha_iso ? ' (sin fecha aún — se actualizará el jueves)' : ''}`);
+    loadHome();
+  } catch(e) {
+    toast('Error creando partido: ' + e.message, 'error');
+  }
+}
+
+// Auto-actualizar resultado desde PDF si el partido existe
+async function autoActualizarResultadoPDF(ur) {
+  if (!ur?.rival) return;
+  const match = state.matches.find(m =>
+    !m.is_played && (
+      m.opponent.toLowerCase().includes(ur.rival.toLowerCase().split(' ')[0]) ||
+      ur.rival.toLowerCase().includes(m.opponent.toLowerCase().split(' ')[0])
+    )
+  );
+  if (!match) return; // No hay partido pendiente que actualizar
+
+  try {
+    const tq = state.viewingTournament ? `?t=${state.viewingTournament.id}` : '';
+    await api(`/matches/${match.id}`, 'PUT', {
+      home_score: ur.goles_mirador,
+      away_score: ur.goles_rival,
+      is_played: true,
+    });
+    toast(`✅ Resultado vs ${ur.rival} actualizado automáticamente`);
+    loadHome();
+  } catch(e) {
+    // silencioso — no forzar
+  }
 }
 
 // Pre-cargar partido del PDF en el modal de partidos
@@ -429,23 +622,62 @@ async function loadHome() {
     $('last-result-wrap').innerHTML = ''; $('vote-section').innerHTML = '';
     return;
   }
-  // Cargar boletín del localStorage
+  // Cargar boletín del localStorage (solo si tiene el nuevo formato)
   try {
     const stored = localStorage.getItem('miradorBulletin');
-    if (stored) renderBulletinBanner(JSON.parse(stored));
-  } catch(e) {}
-  // Cargar galería preview
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Validar que sea el nuevo formato (tiene resultados como array)
+      if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
+        renderBulletinBanner(parsed);
+      } else {
+        // Formato viejo — borrar para no romper la app
+        localStorage.removeItem('miradorBulletin');
+      }
+    }
+  } catch(e) { localStorage.removeItem('miradorBulletin'); }
+
   loadHomeGallery();
+
   try {
     const matches = await api(`/matches${tParam()}`);
     state.matches = matches;
     state.upcomingMatches = matches.filter(m=>!m.is_played).sort((a,b)=>parseLocalDate(b.match_date)-parseLocalDate(a.match_date));
     const played = matches.filter(m=>m.is_played).sort((a,b)=>parseLocalDate(b.match_date)-parseLocalDate(a.match_date));
     state.lastMatch = played[0] || null;
+
+    // Renderizar todo inmediatamente, sin esperar votos
+    // Cargar votos del último partido ANTES de renderizar (para que el MVP salga de inmediato)
+    state.matchVotes = {};
+    if (played.length) {
+      try {
+        const votes = await api(`/matches/${played[0].id}/votes`);
+        if (votes?.length) {
+          const top = votes.sort((a,b) => b.vote_count - a.vote_count)[0];
+          if (top?.vote_count > 0) state.matchVotes[played[0].id] = top;
+        }
+      } catch(e) {}
+    }
+
     renderUpcomingSlider();
     renderLastResult();
     renderStandings();
-    await renderVoteSection();
+    renderVoteSection();
+
+    // Cargar votos del resto de partidos en segundo plano
+    if (played.length > 1) {
+      Promise.all(played.slice(1, 5).map(async m => {
+        try {
+          const votes = await api(`/matches/${m.id}/votes`);
+          if (votes?.length) {
+            const top = votes.sort((a,b) => b.vote_count - a.vote_count)[0];
+            if (top?.vote_count > 0) state.matchVotes[m.id] = top;
+          }
+        } catch(e) {}
+      })).then(() => {
+        if ($('result-card-body')) renderResultsSlider();
+      });
+    }
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
@@ -521,6 +753,19 @@ function renderResultsSlider() {
       `<span class="scorer-chip"><span class="num">${c}</span> ${n} ⚽</span>`).join('');
     const assistChips = Object.entries(assistMap).map(([n,c]) =>
       `<span class="scorer-chip" style="background:rgba(255,255,255,0.08);color:#f0e68c"><span class="num" style="background:#b8a800;color:#000">${c}</span> ${n} 🅰️</span>`).join('');
+
+    // MVP del partido (si hay votos cargados)
+    const mvp = state.matchVotes?.[m.id];
+    const mvpHtml = mvp ? `
+      <div style="margin-top:10px;background:rgba(193,241,0,0.1);border:1px solid rgba(193,241,0,0.3);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">⭐</span>
+        <div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--lime);font-weight:700">MVP del partido</div>
+          <div style="font-size:14px;font-weight:700;color:#fff">${mvp.player_name}</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.5)">${mvp.vote_count} voto${mvp.vote_count!==1?'s':''}</div>
+        </div>
+      </div>` : '';
+
     return `
       <div class="result-label">🏁 ${m.phase || 'Partido'} · ${fmtShortDate(m.match_date)}</div>
       <div class="result-scoreboard">
@@ -537,6 +782,7 @@ function renderResultsSlider() {
       ${m.location ? `<div style="text-align:center;color:rgba(255,255,255,0.45);font-size:12px;margin-bottom:10px">📍 ${m.location}</div>` : ''}
       ${scorerChips ? `<div><div class="form-label" style="margin-bottom:6px;color:rgba(255,255,255,0.5)">Goles</div><div class="scorers-list">${scorerChips}</div></div>` : ''}
       ${assistChips ? `<div style="margin-top:8px"><div class="form-label" style="margin-bottom:6px;color:rgba(255,255,255,0.5)">Asistencias</div><div class="scorers-list">${assistChips}</div></div>` : ''}
+      ${mvpHtml}
       ${state.isAdmin && !isViewingPast() ? `<div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary" onclick="openResultModal(${m.id})">✏️ Editar</button>
         <button class="btn btn-danger" onclick="deleteMatch(${m.id})">🗑️</button>
@@ -598,6 +844,65 @@ function renderStandings() {
       style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;padding:5px 12px;border-radius:4px;border:1px solid ${selectedPhase===btn.key?'var(--navy)':'var(--border)'};background:${selectedPhase===btn.key?'var(--navy)':'var(--surface)'};color:${selectedPhase===btn.key?'var(--on-navy)':'var(--text-faint)'};cursor:pointer">
       ${btn.label}
     </button>`).join('');
+  // ── Tabla del grupo desde el boletín (si existe) ──
+  let grupoHtml = '';
+  try {
+    const bull = JSON.parse(localStorage.getItem('miradorBulletin') || 'null');
+    if (!bull) throw new Error('no bulletin');
+
+    // Nuevo formato: tablas_grupo (array de grupos)
+    // Viejo formato: grupo.equipos (solo el grupo de Mirador)
+    const tablas = Array.isArray(bull.tablas_grupo) ? bull.tablas_grupo
+      : bull.grupo?.equipos ? [{ nombre: bull.grupo.nombre || 'Grupo', equipos: bull.grupo.equipos }]
+      : [];
+
+    if (tablas.length) {
+      grupoHtml = tablas.map(gr => {
+        if (!gr.equipos?.length) return '';
+        return `
+          <div style="margin-bottom:16px">
+            <div style="font-family:'Oswald',sans-serif;font-size:13px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:10px;letter-spacing:0.04em">📊 ${gr.nombre||'Grupo'} — Posiciones</div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="background:var(--navy);color:var(--on-navy)">
+                  <th style="padding:8px 6px;text-align:left;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600">#</th>
+                  <th style="padding:8px 8px;text-align:left;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600">Equipo</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600">PJ</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600">PG</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600">PE</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600">PP</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600">GF</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600">GC</th>
+                  <th style="padding:8px 6px;text-align:center;font-size:10px;font-weight:600;background:var(--lime);color:var(--navy)">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${gr.equipos.map((e, i) => {
+                  const esM = (e.equipo||'').toUpperCase().includes('MIRADOR') || e.es_mirador;
+                  const pts = e.puntos ?? ((e.pg??0)*3 + (e.pe??0));
+                  const bgRow = esM ? 'background:rgba(193,241,0,0.08)' : i%2===0 ? '' : 'background:var(--surface-low)';
+                  return `<tr style="border-bottom:1px solid var(--border-light);${bgRow}">
+                    <td style="padding:9px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint)">${e.puesto??i+1}°</td>
+                    <td style="padding:9px 8px;${esM?'font-weight:700;color:var(--navy)':''}">
+                      ${e.equipo}${esM?` <span style="font-size:10px;background:var(--lime);color:var(--navy);padding:1px 5px;border-radius:3px;font-weight:700">TÚ</span>`:''}
+                    </td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'JetBrains Mono',monospace">${e.pj??0}</td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'JetBrains Mono',monospace;color:${(e.pg??0)>0?'var(--green)':'var(--text-faint)'}">${e.pg??0}</td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'JetBrains Mono',monospace;color:var(--text-faint)">${e.pe??0}</td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'JetBrains Mono',monospace;color:${(e.pp??0)>0?'var(--red)':'var(--text-faint)'}">${e.pp??0}</td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'JetBrains Mono',monospace">${e.gf??'—'}</td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'JetBrains Mono',monospace">${e.gc??'—'}</td>
+                    <td style="text-align:center;padding:9px 6px;font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:var(--navy)">${pts}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }).join('');
+      if (bull._fecha) grupoHtml += `<div style="font-size:10px;color:var(--text-faint);margin-top:4px;text-align:right">Fuente: Boletín del ${bull._fecha}</div>`;
+    }
+  } catch(e) {}
+
   wrap.innerHTML=`<div class="card" style="overflow:hidden;padding:0">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border-light)">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -624,6 +929,7 @@ function renderStandings() {
       }).join('')}
       ${!matches.length?`<span style="font-size:12px;color:var(--text-faint)">Sin partidos en esta fase</span>`:''}
     </div>
+    ${grupoHtml ? `<div style="padding:16px 20px;border-top:1px solid var(--border-light)">${grupoHtml}</div>` : ''}
   </div>`;
 }
 
@@ -1262,6 +1568,7 @@ function deletePhoto(id) {
 let aiFileData = null;
 let aiFileDataRetirados = [];
 // resultIdx tracks current position in the results slider
+// matchVotes stores top voter per match { matchId: {player_name, vote_count} }
 
 
 async function loadAI() {

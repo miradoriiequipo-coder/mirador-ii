@@ -654,73 +654,117 @@ async def read_tournament_pdf(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error leyendo PDF: {str(e)}")
 
-    prompt = f"""Eres un asistente que procesa boletines de torneos de fútbol amateur colombiano.
-Extrae SOLO la información relacionada con el equipo "MIRADOR II" de este boletín.
-Devuelve SOLO un JSON válido, sin texto adicional ni backticks.
+    prompt = f"""Eres un asistente que procesa boletines del Torneo Metropolitano de fútbol amateur colombiano.
+Devuelve SOLO un JSON válido sin texto ni backticks.
 
-ESTRUCTURA EXACTA A DEVOLVER:
+EXTRAE EXACTAMENTE ESTAS SECCIONES:
+
 {{
-  "proximo_partido": {{
+  "fase_actual": "Cuartos de Final",
+  "fecha_juego": "17 de Mayo de 2026",
+  "proxima_fecha": "24 de Mayo de 2026",
+  "proximo_partido_mirador": {{
+    "rival": "ASTON BIRRA",
+    "es_local": true,
+    "hora": null,
+    "campo": null,
+    "fecha_str": "Domingo 24 de Mayo de 2026"
+  }},
+  "ultimo_resultado_mirador": {{
     "rival": "THE FRIENDS",
-    "fecha_str": "Domingo 17 de mayo de 2026",
-    "hora": "6:50AM",
-    "lugar": "SIBERIA CAMPO D",
-    "fase": "Cuartos de Final - Fecha 1",
-    "es_local": false
-  }},
-  "ultimo_resultado": {{
-    "rival": "ATLAS F.C.",
     "goles_mirador": 2,
-    "goles_rival": 0,
-    "fecha_str": "10 de mayo de 2026",
+    "goles_rival": 2,
     "es_local": false
   }},
-  "fair_play": {{
-    "posicion": 1,
-    "puntos": 272,
-    "es_ganador": true
-  }},
-  "valla_menos_vencida": {{
-    "posicion": 3,
-    "goles_contra": 26
-  }},
-  "grupo": {{
-    "nombre": "GRUPO A",
-    "equipos": [
-      {{"equipo": "THE FRIENDS", "puesto": 1}},
-      {{"equipo": "ASTON BIRRA", "puesto": 2}},
-      {{"equipo": "DECADENTES F.C.", "puesto": 3}},
-      {{"equipo": "MIRADOR II", "puesto": 4}}
-    ]
-  }},
+  "resultados": [
+    {{"grupo": "A", "local": "THE FRIENDS", "goles_local": 2, "visitante": "MIRADOR II", "goles_visitante": 2, "tiene_mirador": true}},
+    {{"grupo": "A", "local": "ASTON BIRRA", "goles_local": 2, "visitante": "DECADENTES F.C.", "goles_visitante": 2, "tiene_mirador": false}},
+    {{"grupo": "B", "local": "MANCHESTER F.C.", "goles_local": 2, "visitante": "REAL MAFIA", "goles_visitante": 0, "tiene_mirador": false}},
+    {{"grupo": "B", "local": "MACARA F.C.", "goles_local": 2, "visitante": "SATUPSOL F.C.", "goles_visitante": 2, "tiene_mirador": false}}
+  ],
+  "programacion": [
+    {{"grupo": "A", "local": "DECADENTES F.C.", "visitante": "THE FRIENDS", "hora": null, "campo": null, "tiene_mirador": false}},
+    {{"grupo": "A", "local": "MIRADOR II", "visitante": "ASTON BIRRA", "hora": null, "campo": null, "tiene_mirador": true}},
+    {{"grupo": "B", "local": "SATUPSOL F.C.", "visitante": "MANCHESTER F.C.", "hora": null, "campo": null, "tiene_mirador": false}},
+    {{"grupo": "B", "local": "REAL MAFIA", "visitante": "MACARA", "hora": null, "campo": null, "tiene_mirador": false}}
+  ],
+  "valla_menos_vencida": [
+    {{"puesto": 1, "equipo": "MANCHESTER F.C.", "goles_contra": 17, "es_mirador": false}},
+    {{"puesto": 2, "equipo": "MACARA", "goles_contra": 18, "es_mirador": false}},
+    {{"puesto": 3, "equipo": "MIRADOR II", "goles_contra": 28, "es_mirador": true}}
+  ],
+  "fair_play": [
+    {{"puesto": 1, "equipo": "MIRADOR II", "puntos": 272, "es_mirador": true, "es_ganador": true}},
+    {{"puesto": 2, "equipo": "TRIBU BACATA FC", "puntos": 264, "es_mirador": false}}
+  ],
   "cronograma": [
-    {{"fecha": "17 Mayo", "evento": "1ra fecha cuartos de final"}},
-    {{"fecha": "24 Mayo", "evento": "2da fecha cuartos de final"}},
-    {{"fecha": "31 Mayo", "evento": "3ra fecha cuartos de final"}},
+    {{"fecha": "24 Mayo", "evento": "Segunda fecha Cuartos de Final"}},
+    {{"fecha": "31 Mayo", "evento": "Tercera fecha Cuartos de Final"}},
     {{"fecha": "7 Junio", "evento": "Semifinal"}},
     {{"fecha": "14 Junio", "evento": "Gran Final"}}
+  ],
+  "tablas_grupo": [
+    {{
+      "nombre": "GRUPO A",
+      "equipos": [
+        {{"puesto": 1, "equipo": "MIRADOR II", "pj": 1, "pg": 0, "pe": 1, "pp": 0, "gf": 2, "gc": 2, "puntos": 2, "es_mirador": true}},
+        {{"puesto": 2, "equipo": "THE FRIENDS", "pj": 1, "pg": 0, "pe": 1, "pp": 0, "gf": 2, "gc": 2, "puntos": 2, "es_mirador": false}}
+      ]
+    }},
+    {{
+      "nombre": "GRUPO B",
+      "equipos": [
+        {{"puesto": 1, "equipo": "MANCHESTER F.C.", "pj": 1, "pg": 1, "pe": 0, "pp": 0, "gf": 2, "gc": 0, "puntos": 3, "es_mirador": false}}
+      ]
+    }}
   ],
   "costo_arbitraje": 40000,
   "costo_campo": 140000
 }}
 
 REGLAS:
-- Si MIRADOR II es el visitante en el próximo partido, es_local = false
-- Si MIRADOR II aparece primero (LOCAL), es_local = true
-- goles_mirador = los goles que hizo MIRADOR II
-- goles_rival = los goles que le hicieron a MIRADOR II
-- Si un campo no está disponible, usa null
+- fase_actual: detecta la fase del torneo (Cuartos de Final, Semifinal, Gran Final)
+- resultados: todos los partidos jugados en la última fecha, con goles
+- programacion: todos los partidos programados para la próxima fecha (hora y campo null si no aparecen)
+- valla_menos_vencida: TODOS los equipos de la lista, ordenados por goles en contra (menos = mejor)
+- fair_play: TODOS los equipos de la tabla, con sus puntos
+- tablas_grupo: tabla de posiciones de cada grupo con pj, pg, pe, pp, gf, gc, puntos
+- tiene_mirador: true si MIRADOR II juega ese partido
+- es_mirador: true si el equipo es MIRADOR II
+- Si hora o campo no aparecen en el boletín, usa null
+- IMPORTANTE: Si el boletín NO tiene programación de próxima fecha para MIRADOR II, pon proximo_partido_mirador: null
+- IMPORTANTE: Si el boletín NO tiene resultado de MIRADOR II, pon ultimo_resultado_mirador: null
 
-BOLETÍN COMPLETO:
-{full_text[:5000]}
+BOLETÍN:
+{full_text[:6000]}
 """
 
+
     try:
-        raw = _generate(prompt)
+        c = _client()
+        resp = c.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=3000,
+            temperature=0.1,
+        )
+        raw = resp.choices[0].message.content
         raw = raw.strip().replace("```json", "").replace("```", "").strip()
-        data = json.loads(raw)
+        # Si el JSON viene truncado, intentar cerrarlo
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            # Intentar reparar JSON truncado añadiendo cierres
+            for closing in [']}', ']}]}', '}}', '}}}']:
+                try:
+                    data = json.loads(raw + closing)
+                    break
+                except:
+                    pass
+            else:
+                raise HTTPException(status_code=500, detail="Error parseando respuesta de IA: JSON incompleto")
         return {"success": True, "data": data, "texto_extraido": len(full_text)}
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Error parseando respuesta de IA: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error de IA: {str(e)}")
