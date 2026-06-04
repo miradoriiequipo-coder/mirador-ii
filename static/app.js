@@ -706,13 +706,68 @@ function renderUpcomingSlider() {
   const track=$('upcoming-track'), dots=$('slider-dots');
   const now = new Date();
   const upcoming = state.upcomingMatches;
+
   if (!upcoming.length) {
-    track.innerHTML=`<div class="match-card" style="min-width:300px"><div class="empty"><div class="empty-icon">📅</div><h3>Sin partidos programados</h3>${state.isAdmin&&!isViewingPast()?`<button class="btn btn-primary" style="margin-top:12px" onclick="openAddMatchModal()">+ Agregar partido</button>`:''}</div></div>`;
+    track.innerHTML=`<div class="match-card" style="width:100%"><div class="empty"><div class="empty-icon">📅</div><h3>Sin partidos programados</h3>${state.isAdmin&&!isViewingPast()?`<button class="btn btn-primary" style="margin-top:12px" onclick="openAddMatchModal()">+ Agregar partido</button>`:''}</div></div>`;
     dots.innerHTML=''; return;
   }
+
+  // Detectar si es un partido especial
+  const phaseConfig = (phase) => {
+    const p = (phase||'').toLowerCase();
+    if (p.includes('gran final') || p.includes('grand final'))
+      return { label:'🏆 LA GRAN FINAL', bg:'linear-gradient(135deg,#7b2d00,#c0392b,#e67e22)', glow:'rgba(230,126,34,0.4)', crown:true };
+    if (p.includes('semifinal') || p.includes('semi final'))
+      return { label:'⚡ GRAN SEMIFINAL', bg:'linear-gradient(135deg,#0d2a5e,#1565c0,#1a3f8a)', glow:'rgba(21,101,192,0.4)', crown:false };
+    if (p.includes('tercer') || p.includes('tercero') || p.includes('mejor tercero') || p.includes('3er'))
+      return { label:'🥉 MEJOR TERCERO', bg:'linear-gradient(135deg,#2d4a1e,#388e3c,#1b5e20)', glow:'rgba(56,142,60,0.4)', crown:false };
+    if (p.includes('cuartos') || p.includes('cuarto'))
+      return { label:'📌 CUARTOS DE FINAL', bg:null, glow:null, crown:false };
+    return null;
+  };
+
   track.innerHTML = upcoming.map(m => {
     const isPast = parseLocalDate(m.match_date) < now;
-    return `<div class="match-card">
+    const cfg = phaseConfig(m.phase);
+    const isSpecial = cfg && cfg.bg;
+
+    if (isSpecial) {
+      // ── Tarjeta especial para semifinal / final / tercer puesto ──
+      return `<div class="match-card" style="width:100%;padding:0;overflow:hidden;border:none;background:transparent">
+        <!-- Banner especial -->
+        <div style="background:${cfg.bg};padding:14px 20px 12px;text-align:center;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,${cfg.glow} 0%,transparent 70%)"></div>
+          <div style="font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.1em;text-transform:uppercase;position:relative;text-shadow:0 2px 8px rgba(0,0,0,0.4)">${cfg.label}</div>
+          ${m.phase ? `<div style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:2px;letter-spacing:0.08em;text-transform:uppercase;position:relative">${m.phase}</div>` : ''}
+        </div>
+        <!-- Contenido del partido -->
+        <div style="background:var(--navy);padding:18px 20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="flex:1;text-align:center">
+              <div style="font-family:'Oswald',sans-serif;font-size:13px;font-weight:700;color:var(--lime);letter-spacing:0.06em">MIRADOR II</div>
+            </div>
+            <div style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:rgba(255,255,255,0.3);padding:0 8px">VS</div>
+            <div style="flex:1;text-align:center">
+              <div style="font-family:'Oswald',sans-serif;font-size:13px;font-weight:700;color:#fff;letter-spacing:0.06em">${m.opponent.toUpperCase()}</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:14px;padding-top:12px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
+            <span style="font-size:12px;color:rgba(255,255,255,0.7)">📅 ${fmtShortDate(m.match_date)}</span>
+            ${m.location?`<span style="font-size:12px;color:rgba(255,255,255,0.7)">📍 ${m.location}</span>`:''}
+            ${isPast?`<span style="font-size:12px;color:#f0c040">⏰ Pendiente resultado</span>`:''}
+          </div>
+          ${m.notes?`<div style="margin-top:10px;font-size:12px;color:rgba(255,255,255,0.45);text-align:center">${m.notes}</div>`:''}
+          ${state.isAdmin&&!isViewingPast()?`<div style="display:flex;gap:6px;margin-top:14px;justify-content:center">
+            <button class="btn btn-secondary" style="font-size:12px" onclick="openResultModal(${m.id})">Registrar resultado</button>
+            <button class="btn btn-secondary" style="font-size:12px" onclick="openEditMatchModal(${m.id})">✏️</button>
+            <button class="btn btn-danger" style="font-size:12px" onclick="deleteMatch(${m.id})">🗑️</button>
+          </div>`:''}
+        </div>
+      </div>`;
+    }
+
+    // ── Tarjeta normal ──
+    return `<div class="match-card" style="width:100%">
       ${m.phase?`<div class="match-phase">📌 ${m.phase}</div>`:'<div class="match-phase">📌 Partido</div>'}
       <div class="match-teams">MIRADOR II <span class="match-vs">vs</span> ${m.opponent.toUpperCase()}</div>
       <div class="match-info">
@@ -728,17 +783,10 @@ function renderUpcomingSlider() {
       </div>`:''}
     </div>`;
   }).join('');
+
   dots.innerHTML = upcoming.map((_,i)=>`<button class="slider-dot ${i===0?'active':''}" data-idx="${i}"></button>`).join('');
   dots.querySelectorAll('.slider-dot').forEach(btn=>btn.addEventListener('click',()=>goSlide(+btn.dataset.idx)));
   state.sliderIdx=0;
-  if (state.isAdmin&&!isViewingPast()) {
-    const extra=document.createElement('div');
-    extra.className='match-card';
-    extra.style.cssText='display:flex;align-items:center;justify-content:center;cursor:pointer;border-style:dashed';
-    extra.innerHTML=`<div style="text-align:center;color:var(--text-faint)"><div style="font-size:32px">+</div><div style="font-size:13px;font-weight:700">Agregar Partido</div></div>`;
-    extra.onclick=openAddMatchModal;
-    track.appendChild(extra);
-  }
 }
 
 function goSlide(idx) {
