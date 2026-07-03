@@ -7,7 +7,7 @@ import os
 
 from .database import engine
 from . import models
-from .routers import auth, players, matches, payments, votes, finances, tournaments, gallery, ai
+from .routers import auth, players, matches, payments, votes, finances, tournaments, gallery, ai, attendance
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -42,6 +42,7 @@ app.include_router(finances.router,    prefix="/api")
 app.include_router(tournaments.router, prefix="/api")
 app.include_router(gallery.router,     prefix="/api")
 app.include_router(ai.router,          prefix="/api")
+app.include_router(attendance.router,  prefix="/api")
 
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")

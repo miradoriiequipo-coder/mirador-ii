@@ -192,6 +192,10 @@ async function switchTournament(id) {
   if (!t) return;
   state.viewingTournament = t;
   state.players = []; state.matches = [];
+  // Limpiar boletín del torneo anterior
+  localStorage.removeItem('miradorBulletin');
+  const banner = $('bulletin-banner');
+  if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
   renderTournamentBanner();
   updateAuthUI();
   const activePage = document.querySelector('.page.active')?.id?.replace('page-','') || 'home';
@@ -626,36 +630,29 @@ async function loadHome() {
     $('last-result-wrap').innerHTML = ''; $('vote-section').innerHTML = '';
     return;
   }
-  // Cargar boletín: primero del servidor, fallback a localStorage
-  try {
-    const serverBulletin = await api(`/tournaments/bulletin${tParam()}`);
-    if (serverBulletin && (Array.isArray(serverBulletin.resultados) || Array.isArray(serverBulletin.fair_play))) {
-      localStorage.setItem('miradorBulletin', JSON.stringify(serverBulletin));
-      renderBulletinBanner(serverBulletin);
-    } else {
-      // Fallback a localStorage si el servidor no tiene boletín
-      const stored = localStorage.getItem('miradorBulletin');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
-          renderBulletinBanner(parsed);
-        }
-      }
-    }
-  } catch(e) {
-    // Fallback silencioso a localStorage
+  // Cargar boletín en segundo plano (no bloquea el resto)
+  (async () => {
     try {
-      const stored = localStorage.getItem('miradorBulletin');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
-          renderBulletinBanner(parsed);
-        } else {
-          localStorage.removeItem('miradorBulletin');
-        }
+      const serverBulletin = await api(`/tournaments/bulletin${tParam()}`);
+      if (serverBulletin && (Array.isArray(serverBulletin.resultados) || Array.isArray(serverBulletin.fair_play))) {
+        localStorage.setItem('miradorBulletin', JSON.stringify(serverBulletin));
+        renderBulletinBanner(serverBulletin);
       }
-    } catch(e2) { localStorage.removeItem('miradorBulletin'); }
-  }
+    } catch(e) {
+      // Fallback a localStorage
+      try {
+        const stored = localStorage.getItem('miradorBulletin');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed.resultados) || Array.isArray(parsed.fair_play)) {
+            renderBulletinBanner(parsed);
+          } else {
+            localStorage.removeItem('miradorBulletin');
+          }
+        }
+      } catch(e2) { localStorage.removeItem('miradorBulletin'); }
+    }
+  })();
 
   loadHomeGallery();
 
@@ -757,6 +754,7 @@ function renderUpcomingSlider() {
             ${isPast?`<span style="font-size:12px;color:#f0c040">⏰ Pendiente resultado</span>`:''}
           </div>
           ${m.notes?`<div style="margin-top:10px;font-size:12px;color:rgba(255,255,255,0.45);text-align:center">${m.notes}</div>`:''}
+          <div id="attendance-section-${m.id}" style="margin-top:14px"></div>
           ${state.isAdmin&&!isViewingPast()?`<div style="display:flex;gap:6px;margin-top:14px;justify-content:center">
             <button class="btn btn-secondary" style="font-size:12px" onclick="openResultModal(${m.id})">Registrar resultado</button>
             <button class="btn btn-secondary" style="font-size:12px" onclick="openEditMatchModal(${m.id})">✏️</button>
@@ -776,6 +774,7 @@ function renderUpcomingSlider() {
         ${isPast?`<span style="color:#7a5200">⏰ Pendiente resultado</span>`:''}
       </div>
       ${m.notes?`<div style="margin-top:10px;font-size:12px;color:var(--text-faint)">${m.notes}</div>`:''}
+      <div id="attendance-section-${m.id}" style="margin-top:14px"></div>
       ${state.isAdmin&&!isViewingPast()?`<div style="display:flex;gap:6px;margin-top:14px">
         <button class="btn btn-secondary" style="font-size:12px" onclick="openResultModal(${m.id})">Registrar resultado</button>
         <button class="btn btn-secondary" style="font-size:12px" onclick="openEditMatchModal(${m.id})">✏️</button>
@@ -787,6 +786,316 @@ function renderUpcomingSlider() {
   dots.innerHTML = upcoming.map((_,i)=>`<button class="slider-dot ${i===0?'active':''}" data-idx="${i}"></button>`).join('');
   dots.querySelectorAll('.slider-dot').forEach(btn=>btn.addEventListener('click',()=>goSlide(+btn.dataset.idx)));
   state.sliderIdx=0;
+
+  // Cargar asistencia para cada partido programado
+  upcoming.forEach(m => loadAttendanceSection(m.id));
+}
+
+// ── ASISTENCIA ────────────────────────────────────────────────────
+async function loadAttendanceSection(matchId) {
+  const wrap = $(`attendance-section-${matchId}`);
+  if (!wrap) return;
+  // Solo mostrar si es admin
+  if (!state.isAdmin) return;
+  try {
+    const data = await api(`/matches/${matchId}/attendance${tParam()}`);
+    renderAttendanceSection(wrap, data, matchId);
+  } catch(e) { /* silencioso */ }
+}
+
+function renderAttendanceSection(wrap, data, matchId) {
+  const confirmed = data.players.filter(p => p.status === 'confirmed');
+
+  const chips = confirmed.map(p =>
+    `<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(193,241,0,0.15);border:1px solid rgba(193,241,0,0.4);border-radius:20px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--lime)">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;opacity:0.7">${p.player_number}</span> ${p.full_name.split(' ')[0]}
+    </span>`
+  ).join('');
+
+  wrap.innerHTML = `
+    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;margin-top:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.8)">👥 Asistencia</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--lime);font-weight:700">${confirmed.length}/${data.total}</span>
+        </div>
+        <button onclick="openAttendanceModal(${matchId})"
+          style="font-size:11px;padding:5px 12px;background:rgba(193,241,0,0.15);color:var(--lime);border:1px solid rgba(193,241,0,0.4);border-radius:20px;cursor:pointer;font-weight:600">
+          ✏️ Registrar
+        </button>
+      </div>
+      ${confirmed.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>`
+        : '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-style:italic">Sin asistencia registrada</div>'}
+    </div>`;
+}
+
+function openAttendanceModal(matchId) {
+  let modal = $('modal-attendance');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-attendance';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <h3>👥 Registrar asistencia</h3>
+          <button class="modal-close" onclick="closeModal('modal-attendance')">×</button>
+        </div>
+        <div class="modal-body" id="attendance-modal-body">
+          <div class="loading-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal('modal-attendance'); });
+  }
+  showModal('modal-attendance');
+  renderAttendanceModalBody(matchId);
+}
+
+async function renderAttendanceModalBody(matchId) {
+  const body = $('attendance-modal-body');
+  if (!body) return;
+
+  let data;
+  try {
+    data = await api(`/matches/${matchId}/attendance${tParam()}`);
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);padding:12px">Error: ${e.message}</div>`;
+    return;
+  }
+
+  const confirmed = new Set(data.players.filter(p => p.status === 'confirmed').map(p => p.player_id));
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text-faint);margin-bottom:14px">
+      Marca quién asistió al partido. Solo el admin puede hacer esto.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button onclick="markAllAttendance(${matchId}, true)"
+        style="flex:1;padding:8px;background:rgba(193,241,0,0.1);border:1px solid var(--lime);border-radius:8px;color:var(--navy);font-weight:700;font-size:12px;cursor:pointer">✅ Marcar todos</button>
+      <button onclick="markAllAttendance(${matchId}, false)"
+        style="flex:1;padding:8px;background:var(--surface-low);border:1px solid var(--border);border-radius:8px;color:var(--text-faint);font-size:12px;cursor:pointer">⬜ Limpiar todo</button>
+    </div>
+    <div id="attendance-checklist" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto">
+      ${data.players.map(p => `
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border-light);border-radius:8px;cursor:pointer;background:${confirmed.has(p.player_id)?'rgba(193,241,0,0.06)':'var(--surface-low)'}">
+          <input type="checkbox" data-player="${p.player_id}" ${confirmed.has(p.player_id)?'checked':''}
+            style="width:18px;height:18px;cursor:pointer;accent-color:var(--navy)"/>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);min-width:22px">${p.player_number}</span>
+          <span style="font-size:13px;font-weight:600;color:var(--navy)">${p.full_name}</span>
+        </label>`).join('')}
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button onclick="saveAttendance(${matchId})"
+        style="flex:1;padding:10px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">💾 Guardar asistencia</button>
+      <button onclick="closeModal('modal-attendance')"
+        style="padding:10px 16px;background:var(--surface-low);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancelar</button>
+    </div>`;
+}
+
+function markAllAttendance(matchId, check) {
+  document.querySelectorAll('#attendance-checklist input[type=checkbox]').forEach(cb => {
+    cb.checked = check;
+  });
+}
+
+async function saveAttendance(matchId) {
+  const checkboxes = document.querySelectorAll('#attendance-checklist input[type=checkbox]');
+  const btn = document.querySelector('#attendance-modal-body button[onclick^="saveAttendance"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  try {
+    // Guardar cada jugador
+    const promises = Array.from(checkboxes).map(cb => {
+      const playerId = +cb.dataset.player;
+      const status = cb.checked ? 'confirmed' : 'declined';
+      return api(`/matches/${matchId}/attendance`, 'POST', { player_id: playerId, status });
+    });
+    await Promise.all(promises);
+    toast('✅ Asistencia guardada');
+    closeModal('modal-attendance');
+    loadAttendanceSection(matchId);
+  } catch(e) {
+    toast(e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar asistencia'; }
+  }
+}
+
+function renderAttendanceSection(wrap, data, matchId) {
+  const confirmed = data.players.filter(p => p.status === 'confirmed');
+  const total = data.total;
+
+  // Chips de nombres confirmados (texto blanco sobre fondo oscuro)
+  const chips = confirmed.map(p =>
+    `<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(193,241,0,0.15);border:1px solid rgba(193,241,0,0.4);border-radius:20px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--lime)">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;opacity:0.7">${p.player_number}</span> ${p.full_name.split(' ')[0]}
+    </span>`
+  ).join('');
+
+  wrap.innerHTML = `
+    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;margin-top:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.8)">👥 Asistencia</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--lime);font-weight:700">${confirmed.length}/${total}</span>
+          ${data.declined>0?`<span style="font-size:10px;color:rgba(255,100,100,0.8)">· ${data.declined} no van</span>`:''}
+        </div>
+        <button onclick="openAttendanceModal(${matchId})"
+          style="font-size:11px;padding:5px 12px;background:rgba(193,241,0,0.15);color:var(--lime);border:1px solid rgba(193,241,0,0.4);border-radius:20px;cursor:pointer;font-weight:600">
+          ${confirmed.length === 0 ? '¿Vas al partido? →' : '✏️ Confirmar'}
+        </button>
+      </div>
+      ${confirmed.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>` : '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-style:italic">Nadie ha confirmado aún</div>'}
+    </div>`;
+}
+
+function openAttendanceModal(matchId) {
+  const data = state.attendanceCache?.[matchId];
+
+  let modal = $('modal-attendance');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-attendance';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+          <h3>👥 Asistencia al partido</h3>
+          <button class="modal-close" onclick="closeModal('modal-attendance')">×</button>
+        </div>
+        <div class="modal-body" id="attendance-modal-body">
+          <div class="loading-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal('modal-attendance'); });
+  }
+
+  showModal('modal-attendance');
+  renderAttendanceModalBody(matchId);
+}
+
+async function renderAttendanceModalBody(matchId, selectedPlayerId = null) {
+  const body = $('attendance-modal-body');
+  if (!body) return;
+
+  // Cargar datos frescos
+  let data;
+  try {
+    data = await api(`/matches/${matchId}/attendance${tParam()}`);
+    if (!state.attendanceCache) state.attendanceCache = {};
+    state.attendanceCache[matchId] = data;
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);padding:12px">Error: ${e.message}</div>`;
+    return;
+  }
+
+  const stored = JSON.parse(localStorage.getItem('mirador_attendance') || '{}');
+  const myStatus = stored[matchId];
+
+  if (selectedPlayerId) {
+    // Pantalla de PIN
+    const player = data.players.find(p => p.player_id === selectedPlayerId);
+    const nombre = player ? `${player.player_number} ${player.full_name}` : '';
+    const currentStatus = player?.status;
+    body.innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:28px;margin-bottom:6px">🔑</div>
+        <div style="font-weight:700;font-size:16px;color:var(--navy)">${nombre}</div>
+        ${currentStatus !== 'pending' ? `<div style="font-size:12px;color:var(--text-faint);margin-top:4px">Estado actual: ${currentStatus==='confirmed'?'✅ Confirmado':'❌ No disponible'}</div>` : ''}
+      </div>
+      <label class="form-label">Tu PIN personal</label>
+      <input id="attendance-pin-input" class="form-input" type="password" inputmode="numeric"
+        maxlength="10" placeholder="Ingresa tu PIN"
+        style="text-align:center;font-size:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.2em;margin-bottom:8px"
+        onkeydown="if(event.key==='Enter') submitAttendanceModal(${matchId},${selectedPlayerId},'confirmed')"/>
+      <div id="attendance-pin-error" class="form-error"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button onclick="submitAttendanceModal(${matchId},${selectedPlayerId},'confirmed')"
+          style="flex:1;padding:10px;background:var(--lime);color:var(--navy);border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">✅ Voy al partido</button>
+        <button onclick="submitAttendanceModal(${matchId},${selectedPlayerId},'declined')"
+          style="flex:1;padding:10px;background:var(--surface-low);color:var(--red);border:1px solid var(--red);border-radius:8px;font-size:13px;cursor:pointer">❌ No puedo</button>
+      </div>
+      <button onclick="renderAttendanceModalBody(${matchId})"
+        style="width:100%;margin-top:8px;padding:8px;background:none;border:none;font-size:12px;color:var(--text-faint);cursor:pointer">← Volver a la lista</button>`;
+    setTimeout(() => $('attendance-pin-input')?.focus(), 100);
+    return;
+  }
+
+  // Lista de jugadores
+  const confirmed = data.players.filter(p => p.status === 'confirmed');
+  const pending   = data.players.filter(p => p.status === 'pending');
+  const declined  = data.players.filter(p => p.status === 'declined');
+
+  const playerRow = (p) => {
+    const icon = p.status==='confirmed' ? '✅' : p.status==='declined' ? '❌' : '⬜';
+    const isMine = myStatus && stored[matchId+'_pid'] === p.player_id;
+    return `<button onclick="renderAttendanceModalBody(${matchId},${p.player_id})"
+      style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border-light);border-radius:8px;background:${p.status==='confirmed'?'rgba(193,241,0,0.05)':p.status==='declined'?'rgba(255,0,0,0.03)':'var(--surface-low)'};cursor:pointer;text-align:left;margin-bottom:6px">
+      <span style="font-size:16px">${icon}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);min-width:22px">${p.player_number}</span>
+      <span style="font-size:13px;font-weight:600;color:var(--navy);flex:1">${p.full_name}</span>
+      <span style="font-size:10px;color:var(--text-faint)">Cambiar →</span>
+    </button>`;
+  };
+
+  body.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:16px;text-align:center">
+      <div style="flex:1;background:rgba(193,241,0,0.08);border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:700;color:var(--navy)">${confirmed.length}</div>
+        <div style="font-size:11px;color:var(--text-faint)">Confirmados</div>
+      </div>
+      <div style="flex:1;background:rgba(255,0,0,0.05);border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:700;color:var(--red)">${declined.length}</div>
+        <div style="font-size:11px;color:var(--text-faint)">No van</div>
+      </div>
+      <div style="flex:1;background:var(--surface-low);border-radius:8px;padding:10px">
+        <div style="font-size:22px;font-weight:700;color:var(--text-faint)">${pending.length}</div>
+        <div style="font-size:11px;color:var(--text-faint)">Sin resp.</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px">Selecciona tu nombre para confirmar con tu PIN:</div>
+    <div style="max-height:320px;overflow-y:auto">
+      ${data.players.map(p => playerRow(p)).join('')}
+    </div>
+    ${state.isAdmin ? `<div style="border-top:1px solid var(--border-light);margin-top:12px;padding-top:10px;font-size:11px;color:var(--text-faint)">Admin: toca cualquier jugador para editar su estado</div>` : ''}`;
+}
+
+async function submitAttendanceModal(matchId, playerId, status) {
+  const pin = $('attendance-pin-input')?.value?.trim() || '';
+  const errEl = $('attendance-pin-error');
+
+  if (!pin) {
+    if (errEl) errEl.textContent = 'Ingresa tu PIN';
+    $('attendance-pin-input')?.focus();
+    return;
+  }
+
+  try {
+    const res = await api(`/matches/${matchId}/attendance`, 'POST', { player_id: playerId, status, pin });
+    const stored = JSON.parse(localStorage.getItem('mirador_attendance') || '{}');
+    stored[matchId] = status;
+    stored[matchId + '_pid'] = playerId;
+    localStorage.setItem('mirador_attendance', JSON.stringify(stored));
+    toast(res.message);
+    closeModal('modal-attendance');
+    loadAttendanceSection(matchId);
+  } catch(e) {
+    if (errEl) { errEl.textContent = e.message; $('attendance-pin-input')?.select(); }
+    else toast(e.message, 'error');
+  }
+}
+
+function resetMyAttendance(matchId) {
+  loadAttendanceSection(matchId);
+}
+
+async function adminRemoveAttendance(matchId, playerId) {
+  try {
+    await api(`/matches/${matchId}/attendance/${playerId}`, 'DELETE');
+    loadAttendanceSection(matchId);
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function goSlide(idx) {
@@ -1072,7 +1381,14 @@ async function loadPlayers() {
     const url = state.isAdmin ? `/players${tParam()}&include_inactive=true`.replace('?','?').replace('&','&') : `/players${tParam()}`;
     const players = await api(state.isAdmin ? `/players${tParam()}${tParam()?'&':'?'}include_inactive=true` : `/players${tParam()}`);
     state.players = players;
-    renderPlayersGrid(players);
+    // Cargar stats de asistencia en segundo plano
+    try {
+      const stats = await api(`/matches/attendance/player-stats${tParam()}`);
+      const statsMap = {};
+      stats.forEach(s => { statsMap[s.player_id] = s; });
+      state.players = players.map(p => ({ ...p, attendance_stats: statsMap[p.id] || null }));
+    } catch(e) {}
+    renderPlayersGrid(state.players);
   } catch(e) { grid.innerHTML=`<div class="empty"><div class="empty-icon">❌</div><h3>${e.message}</h3></div>`; }
 }
 
@@ -1099,11 +1415,12 @@ function renderPlayersGrid(players) {
         ${p.phone?`<div class="player-meta">📞 ${p.phone}</div>`:''}
         ${p.health_info?`<div class="player-health">🏥 ${p.health_info}</div>`:''}
         ${state.isAdmin&&p.id_number?`<div class="player-id">🪪 CC: ${p.id_number}</div>`:''}
-      </div>
+        ${p.attendance_stats ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px">👥 ${p.attendance_stats.confirmed} partidos confirmados <span style="color:${p.attendance_stats.pct>=70?'var(--green)':p.attendance_stats.pct>=40?'#7a5200':'var(--red)'};font-weight:700">(${p.attendance_stats.pct}%)</span></div>` : ''}      </div>
       ${state.isAdmin&&!isViewingPast()?`
         <div class="player-actions" style="flex-direction:column;align-items:flex-end;gap:6px">
           <div style="display:flex;gap:4px">
             <button class="btn-icon" onclick="openEditPlayerModal(${p.id})" title="Editar">✏️</button>
+            <button class="btn-icon" onclick="openPinModal(${p.id},'${p.full_name.split(' ')[0]}')" title="PIN asistencia" style="font-size:12px">${p.has_pin?'🔑':'🔓'}</button>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
             ${p.status!=='lesionado'&&p.status!=='inactivo'?`<button onclick="changePlayerStatus(${p.id},'lesionado')" style="font-size:10px;padding:3px 8px;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;cursor:pointer;color:#7a5200;font-weight:600">🟡 Lesión</button>`:''}
@@ -1113,6 +1430,67 @@ function renderPlayersGrid(players) {
           </div>
         </div>`:''}
     </div>`).join('');
+}
+
+function openPinModal(playerId, nombre) {
+  const player = state.players.find(p => p.id === playerId);
+  const currentPin = player?.attendance_pin || '';
+
+  // Crear modal dinámico si no existe
+  let modal = $('modal-pin');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-pin';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:340px">
+        <div class="modal-header">
+          <h3 id="pin-modal-title">PIN de asistencia</h3>
+          <button class="modal-close" onclick="closeModal('modal-pin')">×</button>
+        </div>
+        <div class="modal-body">
+          <p id="pin-modal-desc" style="font-size:13px;color:var(--text-faint);margin-bottom:14px"></p>
+          <label class="form-label">PIN (mínimo 3 caracteres)</label>
+          <input id="pin-modal-input" class="form-input" type="text" maxlength="10"
+            placeholder="Ej: número de camiseta" style="font-family:'JetBrains Mono',monospace;letter-spacing:0.1em"/>
+          <div id="pin-modal-error" class="form-error"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('modal-pin')">Cancelar</button>
+          <button class="btn btn-primary" id="btn-save-pin">Guardar PIN</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal('modal-pin'); });
+  }
+
+  $('pin-modal-title').textContent = `🔑 PIN de ${nombre}`;
+  $('pin-modal-desc').textContent = currentPin
+    ? `PIN actual: ${'•'.repeat(currentPin.length)} — Escribe uno nuevo para cambiarlo`
+    : 'Asigna un PIN que el jugador usará para confirmar asistencia. Compárteselo por privado.';
+  $('pin-modal-input').value = '';
+  clearError('pin-modal-error');
+
+  const btn = $('btn-save-pin');
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', () => savePlayerPin(playerId));
+  $('pin-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') savePlayerPin(playerId); });
+
+  showModal('modal-pin');
+  setTimeout(() => $('pin-modal-input')?.focus(), 100);
+}
+
+async function savePlayerPin(playerId) {
+  const pin = $('pin-modal-input').value.trim();
+  if (!pin) { showError('pin-modal-error', 'El PIN no puede estar vacío'); return; }
+  try {
+    const res = await api(`/players/${playerId}/pin`, 'PATCH', { pin });
+    toast(res.message);
+    closeModal('modal-pin');
+    state.players = [];
+    loadPlayers();
+  } catch(e) { showError('pin-modal-error', e.message); }
 }
 
 function openAddPlayerModal() {

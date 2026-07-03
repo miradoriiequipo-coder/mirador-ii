@@ -38,6 +38,7 @@ class Player(Base):
     status = Column(String, default="activo", nullable=False)
     joined_at_match = Column(Integer, nullable=True)
     photo_url = Column(String, nullable=True)
+    attendance_pin = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     goals = relationship("Goal", back_populates="player", foreign_keys="Goal.player_id")
@@ -45,6 +46,7 @@ class Player(Base):
     votes = relationship("Vote", back_populates="player")
     payments = relationship("Payment", back_populates="player")
     deudas = relationship("Deuda", back_populates="player")
+    attendance = relationship("Attendance", back_populates="player")
 
 
 class Match(Base):
@@ -63,6 +65,7 @@ class Match(Base):
 
     goals = relationship("Goal", back_populates="match", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="match", cascade="all, delete-orphan")
+    attendance = relationship("Attendance", back_populates="match", cascade="all, delete-orphan")
 
 
 class Goal(Base):
@@ -157,3 +160,14 @@ class Photo(Base):
     storage_path = Column(String, nullable=False)
     caption = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+class Attendance(Base):
+    __tablename__ = "attendance"
+    id = Column(Integer, primary_key=True, index=True)
+    match_id = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"))
+    player_id = Column(Integer, ForeignKey("players.id"))
+    status = Column(String, default="confirmed")  # confirmed / declined
+    confirmed_at = Column(DateTime, server_default=func.now())
+
+    match = relationship("Match", back_populates="attendance")
+    player = relationship("Player", back_populates="attendance")

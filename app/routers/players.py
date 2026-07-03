@@ -26,9 +26,11 @@ def _serialize_player(p: models.Player, is_admin: bool) -> dict:
         "is_active": p.is_active,
         "status": p.status or "activo",
         "joined_at_match": p.joined_at_match,
+        "has_pin": bool(p.attendance_pin),
     }
     if is_admin:
         data["id_number"] = p.id_number
+        data["attendance_pin"] = p.attendance_pin  # Solo admin ve el PIN
         data["created_at"] = p.created_at.isoformat() if p.created_at else None
     return data
 
@@ -217,3 +219,23 @@ def deactivate_player(
     player.status = "inactivo"
     db.commit()
     return {"message": f"Jugador {player.full_name} desactivado"}
+
+@router.patch("/{player_id}/pin")
+def set_pin(
+    player_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    """Admin asigna o cambia el PIN de asistencia de un jugador."""
+    player = db.query(models.Player).filter(models.Player.id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Jugador no encontrado")
+    pin = str(body.get("pin", "")).strip()
+    if not pin:
+        raise HTTPException(status_code=400, detail="PIN no puede estar vacío")
+    if len(pin) < 1:
+        raise HTTPException(status_code=400, detail="El PIN no puede estar vacío")
+    player.attendance_pin = pin
+    db.commit()
+    return {"message": f"PIN de {player.full_name} actualizado ✅"}
