@@ -55,6 +55,54 @@ input, select, textarea { font-family: inherit; }
 .font-mono       { font-family: 'JetBrains Mono', monospace; }
 
 /* ── Layout ──────────────────────────────────────────────────────── */
+/* ════ BOTTOM NAV (MOBILE) ══════════════════════════════════════ */
+.bottom-nav { display: none; }
+
+@media (max-width: 640px) {
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border-light);
+    z-index: 1000;
+    height: 58px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+  }
+  .bottom-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 6px 2px;
+    color: var(--text-faint);
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bottom-nav-btn.active { color: var(--navy); }
+  .bottom-nav-btn .nav-icon { font-size: 20px; line-height: 1; }
+  /* Ocultar hamburger y menú desplegable en móvil */
+  #hamburger { display: none !important; }
+  #mobile-menu { display: none !important; }
+  /* Espacio para el bottom nav */
+  .container { padding-bottom: 80px !important; }
+  /* Mostrar selector de torneo */
+  #tournament-selector-wrap { display: flex !important; }
+  /* Ocultar nav-links en móvil (ya están en bottom nav) */
+  .nav-links { display: none !important; }
+  #btn-login { font-size: 12px; padding: 6px 12px; }
+}
+
+/* Contenedor normal */
 .container {
   max-width: 640px;
   margin: 0 auto;

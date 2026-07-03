@@ -91,6 +91,8 @@ function navigateTo(page) {
   $(`page-${page}`).classList.add('active');
   document.querySelectorAll(`[data-page="${page}"]`).forEach(a=>a.classList.add('active'));
   $('mobile-menu').classList.remove('open');
+  // Scroll al top en móvil
+  window.scrollTo(0, 0);
   if (page==='home')     loadHome();
   if (page==='players')  loadPlayers();
   if (page==='payments') loadPayments();
@@ -2436,6 +2438,11 @@ async function doLogin(){
 document.addEventListener('DOMContentLoaded', async () => {
   updateAuthUI();
   await loadTournaments();
+
+  // Bottom nav (mobile)
+  document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo(btn.dataset.page));
+  });
 
   document.querySelectorAll('[data-page]').forEach(link=>{
     link.addEventListener('click',e=>{e.preventDefault();navigateTo(link.dataset.page);});

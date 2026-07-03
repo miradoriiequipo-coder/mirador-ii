@@ -49,6 +49,15 @@
   <button id="btn-login-mobile" class="btn btn-primary" style="margin-top:12px">Iniciar sesión</button>
 </div>
 
+<!-- ════ BOTTOM NAV (solo móvil) ═══════════════════════════════ -->
+<nav class="bottom-nav">
+  <button class="bottom-nav-btn active" data-page="home"><span class="nav-icon">🏠</span>Inicio</button>
+  <button class="bottom-nav-btn" data-page="players"><span class="nav-icon">👥</span>Equipo</button>
+  <button class="bottom-nav-btn" data-page="payments"><span class="nav-icon">💰</span>Dineros</button>
+  <button class="bottom-nav-btn" data-page="gallery"><span class="nav-icon">📸</span>Galería</button>
+  <button class="bottom-nav-btn" data-page="ai"><span class="nav-icon">🤖</span>IA</button>
+</nav>
+
 <!-- ════ PAGE: HOME ════════════════════════════════════ -->
 <div id="page-home" class="page active">
   <section id="hero">
@@ -58,10 +67,8 @@
   </section>
   <div class="container">
 
-    <!-- Boletín del torneo (visible si hay datos del PDF) -->
     <div id="bulletin-banner" style="display:none;margin-bottom:8px"></div>
 
-    <!-- Mini chat en inicio (arriba, siempre visible) -->
     <section class="section" style="margin-bottom:0;padding-bottom:8px">
       <div class="card" style="padding:14px">
         <div id="home-chat-messages" style="min-height:0;max-height:200px;overflow-y:auto;margin-bottom:10px;display:flex;flex-direction:column;gap:8px">
@@ -104,7 +111,6 @@
       <div id="standings-wrap"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </section>
 
-    <!-- Galería preview en inicio -->
     <section class="section" id="home-gallery-section" style="display:none">
       <div class="section-header">
         <h2 class="section-title"><span class="dot">◆</span> Galería</h2>
