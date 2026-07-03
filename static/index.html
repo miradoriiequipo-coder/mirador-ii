@@ -137,15 +137,11 @@
   <div class="container">
     <div class="section-header" style="padding-top:32px">
       <h2 class="section-title"><span class="dot">◆</span> Dineros del Equipo</h2>
-      <button class="btn btn-primary admin-only" id="btn-add-payment" style="display:none">+ Registrar Pago</button>
     </div>
     <div id="payments-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px"></div>
     <div id="configs-section" style="margin-bottom:24px"></div>
-    <div class="card payments-table-wrap">
-      <table class="payments-table">
-        <thead><tr><th>#</th><th>Jugador</th><th>Deuda</th><th>Pagado</th><th>Estado</th><th></th></tr></thead>
-        <tbody id="payments-body"><tr><td colspan="6"><div class="loading-wrap"><div class="spinner"></div></div></td></tr></tbody>
-      </table>
+    <div id="payments-table-wrap">
+      <div class="loading-wrap"><div class="spinner"></div></div>
     </div>
   </div>
 </div>

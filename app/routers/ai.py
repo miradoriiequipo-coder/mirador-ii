@@ -21,13 +21,23 @@ def _client():
 
 def _generate(prompt: str) -> str:
     c = _client()
-    resp = c.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1024,
-        temperature=0.7,
-    )
-    return resp.choices[0].message.content
+    try:
+        resp = c.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1024,
+            temperature=0.7,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        err = str(e)
+        if "rate_limit_exceeded" in err or "429" in err:
+            # Extraer tiempo de espera si está disponible
+            import re
+            wait = re.search(r'try again in (\d+m[\d.]+s)', err)
+            wait_msg = f" Intenta de nuevo en {wait.group(1)}." if wait else " Intenta en unos minutos."
+            raise HTTPException(status_code=429, detail=f"⏳ Límite diario de IA alcanzado.{wait_msg} El límite se renueva cada 24 horas.")
+        raise
 
 
 def _generate_with_image(prompt: str, mime_type: str, image_data: bytes) -> str:
@@ -308,7 +318,13 @@ Responde de forma conversacional y amigable. Máximo 3 párrafos cortos."""
     try:
         return {"answer": _generate(prompt)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error de IA: {str(e)}")
+        msg = str(e)
+        if "rate_limit_exceeded" in msg or "429" in msg:
+            import re
+            wait = re.search(r'try again in (\d+m[\d.]+s)', msg)
+            wt = f" Espera {wait.group(1)}." if wait else " Intenta en unos minutos."
+            raise HTTPException(status_code=429, detail=f"⏳ Límite diario de IA alcanzado.{wt}")
+        raise HTTPException(status_code=500, detail=f"Error de IA: {msg}")
 
 
 # ── 2. CRÓNICA DEL PARTIDO ────────────────────────────────────────
@@ -370,7 +386,13 @@ INSTRUCCIONES:
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error de IA: {str(e)}")
+        msg = str(e)
+        if "rate_limit_exceeded" in msg or "429" in msg:
+            import re
+            wait = re.search(r'try again in (\d+m[\d.]+s)', msg)
+            wt = f" Espera {wait.group(1)}." if wait else " Intenta en unos minutos."
+            raise HTTPException(status_code=429, detail=f"⏳ Límite diario de IA alcanzado.{wt}")
+        raise HTTPException(status_code=500, detail=f"Error de IA: {msg}")
 
 
 # ── 3. LECTOR DE ARCHIVO (Excel directo o Imagen con IA) ─────────
@@ -386,54 +408,151 @@ async def read_file(
 
     try:
         if filename.endswith(".xlsx") or filename.endswith(".xls"):
-            # Lectura directa — no necesita IA
-            result = parse_mirador_excel(content)
-            return {
-                "success":   True,
-                "formato":   "excel_mirador",
-                "jugadores": result["jugadores"],
-                "retirados": result["retirados"],
-                "total":     len(result["jugadores"]),
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+
+            # ── Leer config del torneo ──
+            def cel(row, idx):
+                v = row[idx] if len(row) > idx else None
+                if isinstance(v, float): return int(round(v))
+                return v
+
+            def num(row, idx):
+                v = cel(row, idx)
+                try: return float(v) if v else 0.0
+                except: return 0.0
+
+            # Obtener jugadores ya en la app para marcar nuevos
+            if t:
+                tid_check = t
+            else:
+                active = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
+                tid_check = active.id if active else None
+
+            existentes_cedulas = set()
+            existentes_numeros = set()
+            if tid_check:
+                players_existentes = db.query(models.Player).filter(
+                    models.Player.tournament_id == tid_check
+                ).all()
+                existentes_cedulas = {p.id_number for p in players_existentes if p.id_number}
+                existentes_numeros = {p.player_number for p in players_existentes if p.player_number}
+
+            # ── Columnas (0-indexed):
+            # 0=#, 1=Nombre, 2=vacío, 3=Documento, 4=Salud, 5=Teléfono, 6=Dorsal
+            # 7=Abono Insc, 8=Debe Insc
+            # 9=P1, 10=P2, 11=P3, 12=P4, 13=P5, 14=P6
+            # 15=Abono Arb, 16=Debe Arb, 17=Total
+
+            jugadores = []
+            tipo_actual = "antiguo"  # cambia a "nuevo" cuando encuentra fila "Nuevos"
+
+            for i, row in enumerate(rows):
+                if i < 7: continue  # saltar cabeceras (filas 1-7)
+                if not row or not any(v for v in row): continue
+
+                # Detectar sección Nuevos/Antiguos
+                primer_cel = str(row[0] or '').strip().lower()
+                if 'antiguo' in primer_cel:
+                    tipo_actual = 'antiguo'; continue
+                if 'nuevo' in primer_cel:
+                    tipo_actual = 'nuevo'; continue
+
+                # Fila de jugador: col 1 tiene nombre
+                nombre_raw = row[1] if len(row) > 1 else None
+                if not nombre_raw or not isinstance(nombre_raw, str) or not nombre_raw.strip():
+                    continue
+
+                nombre  = nombre_raw.strip()
+                cedula  = str(cel(row, 3) or '').strip()
+                salud   = str(cel(row, 4) or '').strip()
+                telefono = str(cel(row, 5) or '').strip()
+                dorsal  = cel(row, 6)
+                try: dorsal = int(dorsal) if dorsal else 0
+                except: dorsal = 0
+
+                # Abonos e inscripción
+                abono_insc = num(row, 7)
+                debe_insc  = num(row, 8)
+                total_insc = abono_insc + debe_insc
+
+                # Partidos de arbitraje (columnas 9-14)
+                partidos = []
+                for p_idx in range(9, 15):
+                    monto_partido = num(row, p_idx)
+                    if monto_partido > 0:
+                        partidos.append(monto_partido)
+
+                abono_arb = num(row, 15)
+                debe_arb  = num(row, 16)
+                total_arb = abono_arb + debe_arb
+                total_abonado = abono_insc + abono_arb
+
+                # Determinar si es nuevo en la app
+                es_nuevo = cedula not in existentes_cedulas and dorsal not in existentes_numeros
+
+                # Construir lista de abonos
+                abonos = []
+                if total_insc > 0 or abono_insc >= 0:
+                    abonos.append({
+                        "concepto": "Inscripción",
+                        "tipo": "inscripcion",
+                        "fase": None,
+                        "monto_total": round(total_insc),
+                        "abono": round(abono_insc),
+                    })
+                for p_num, monto in enumerate(partidos, 1):
+                    abono_por_partido = round(abono_arb / len(partidos)) if partidos else 0
+                    abonos.append({
+                        "concepto": f"Arbitraje Partido {p_num}",
+                        "tipo": "arbitraje",
+                        "fase": f"Partido {p_num}",
+                        "monto_total": round(monto),
+                        "abono": abono_por_partido,
+                    })
+
+                jugadores.append({
+                    "numero": dorsal,
+                    "nombre": nombre,
+                    "cedula": cedula,
+                    "salud": salud,
+                    "telefono": telefono,
+                    "tipo": tipo_actual,
+                    "es_nuevo_en_app": es_nuevo,
+                    "abonos": abonos,
+                    "total_abonado": round(total_abonado),
+                    "notas": "",
+                })
+
+            resumen = {
+                "total_jugadores": len(jugadores),
+                "jugadores_nuevos_en_app": sum(1 for j in jugadores if j["es_nuevo_en_app"]),
+                "jugadores_actualizados": sum(1 for j in jugadores if not j["es_nuevo_en_app"]),
+                "antiguos": sum(1 for j in jugadores if j["tipo"] == "antiguo"),
+                "nuevos_equipo": sum(1 for j in jugadores if j["tipo"] == "nuevo"),
             }
 
-        elif file.content_type and file.content_type.startswith("image/"):
-            prompt = """Extrae los datos de jugadores de esta imagen de planilla de fútbol.
-Devuelve SOLO un JSON válido sin texto adicional ni backticks:
-{"jugadores":[{"numero":10,"nombre":"Juan Perez","inscripcion":{"total":56000,"abono":56000},"arb_f1":{"total":72000,"abono":72000},"arb_f2":{"total":19000,"abono":19000},"arb_f3":{"total":29000,"abono":12000}}]}
-
-REGLAS:
-- numero: número de camiseta (0 si no aparece)
-- Montos en pesos colombianos enteros
-- Si un valor es '-' o vacío, usa 0
-- Los puntos en números como 56.552 son separadores de miles = 56552"""
-            text = _generate_with_image(prompt, file.content_type, content)
-            text = text.strip().replace("```json", "").replace("```", "").strip()
-            data = json.loads(text)
-
-            # Calcular debe
-            jugadores = []
-            for j in data.get("jugadores", []):
-                for key in ["inscripcion", "arb_f1", "arb_f2", "arb_f3"]:
-                    blk = j.get(key, {})
-                    blk["debe"] = max(0, blk.get("total", 0) - blk.get("abono", 0))
-                    j[key] = blk
-                j["total_abono"] = sum(j.get(k, {}).get("abono", 0) for k in ["inscripcion","arb_f1","arb_f2","arb_f3"])
-                j["total_debe"]  = sum(j.get(k, {}).get("debe",  0) for k in ["inscripcion","arb_f1","arb_f2","arb_f3"])
-                j.setdefault("estado", "activo")
-                jugadores.append(j)
-
-            return {"success": True, "formato": "imagen", "jugadores": jugadores, "retirados": [], "total": len(jugadores)}
+            return {
+                "success": True,
+                "formato": "excel_mirador",
+                "jugadores": jugadores,
+                "retirados": [],
+                "total": len(jugadores),
+                "resumen": resumen,
+            }
 
         else:
-            raise HTTPException(status_code=400, detail="Solo se aceptan imágenes (jpg, png) o Excel (.xlsx)")
+            raise HTTPException(status_code=400, detail="Solo se aceptan Excel (.xlsx) o imágenes")
 
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="No se pudo estructurar los datos. Intenta con una imagen más clara.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando archivo: {str(e)}")
 
 
-# ── 4. IMPORTAR FINANZAS COMPLETAS (SYNC TOTAL) ──────────────────
+# ── 4. IMPORTAR FINANZAS COMPLETAS (SYNC INTELIGENTE) ─────────────
 @router.post("/import-finances")
 def import_finances(
     body: dict,
@@ -444,9 +563,9 @@ def import_finances(
     jugadores_data  = body.get("jugadores", [])
     retirados_data  = body.get("retirados", [])
     incluir_ret     = body.get("incluir_retirados", False)
+    limpiar_primero = body.get("limpiar_primero", False)  # nuevo: borrar todo antes
 
     todos = jugadores_data + (retirados_data if incluir_ret else [])
-
     if not todos:
         raise HTTPException(status_code=400, detail="No hay jugadores para importar")
 
@@ -458,35 +577,159 @@ def import_finances(
             raise HTTPException(status_code=400, detail="No hay torneo activo")
         tid = active.id
 
-    creados = 0
-    actualizados = 0
-    errores = []
+    # ── Opción limpiar: borrar TODOS los jugadores del torneo creados por Excel ──
+    if limpiar_primero:
+        players_existentes = db.query(models.Player).filter(
+            models.Player.tournament_id == tid
+        ).all()
+        for p in players_existentes:
+            db.query(models.Deuda).filter(models.Deuda.player_id == p.id).delete()
+            db.query(models.Payment).filter(models.Payment.player_id == p.id).delete()
+            db.delete(p)
+        db.flush()
 
-    CONCEPTOS = [
-        ("inscripcion", "Inscripción torneo",    None),
-        ("arb_f1",      "Arbitrajes Fase 1",     "Fase 1"),
-        ("arb_f2",      "Arbitrajes Fase 2",     "Fase 2"),
-        ("arb_f3",      "Arbitrajes Fase 3",     "Fase 3"),
-    ]
+    creados = 0; actualizados = 0; errores = []
+
+    for j in todos:
+        try:
+            nombre   = str(j.get("nombre", "")).strip()
+            numero   = int(j.get("numero", 0)) if j.get("numero") else 0
+            cedula   = str(j.get("cedula", "") or "").strip()
+            telefono = str(j.get("telefono", "") or "").strip()
+            salud    = str(j.get("salud", "") or "").strip()
+            if not nombre:
+                continue
+
+            # ── Buscar SOLO por cédula o dorsal (no por nombre — muy impreciso) ──
+            player = None
+            if cedula and cedula not in ("0", ""):
+                player = db.query(models.Player).filter(
+                    models.Player.tournament_id == tid,
+                    models.Player.id_number == cedula,
+                ).first()
+            if not player and numero:
+                player = db.query(models.Player).filter(
+                    models.Player.tournament_id == tid,
+                    models.Player.player_number == numero,
+                ).first()
+
+            if player:
+                player.full_name  = nombre
+                if numero:   player.player_number = numero
+                if cedula:   player.id_number = cedula
+                if telefono: player.phone = telefono
+                if salud:    player.health_info = salud
+                player.is_active = True
+                player.status    = "activo"
+                actualizados += 1
+            else:
+                player = models.Player(
+                    tournament_id=tid,
+                    full_name=nombre,
+                    player_number=numero or 0,
+                    id_number=cedula or None,
+                    phone=telefono or None,
+                    health_info=salud or None,
+                    is_active=True,
+                    status="activo",
+                )
+                db.add(player)
+                db.flush()
+                creados += 1
+
+            # ── Borrar datos previos de Excel para este jugador ──
+            db.query(models.Deuda).filter(
+                models.Deuda.player_id == player.id,
+                models.Deuda.config_tipo.like("xls_%"),
+            ).delete(synchronize_session=False)
+            db.query(models.Payment).filter(
+                models.Payment.player_id == player.id,
+                models.Payment.notes.like("%(Excel)%"),
+            ).delete(synchronize_session=False)
+            db.flush()
+
+            # ── Insertar abonos ──
+            abonos = j.get("abonos", [])
+            for idx, ab in enumerate(abonos):
+                concepto    = ab.get("concepto", f"Concepto {idx+1}")
+                tipo_pago   = ab.get("tipo", "manual")
+                fase        = ab.get("fase", None)
+                monto_total = float(ab.get("monto_total", 0) or 0)
+                abono_val   = float(ab.get("abono", 0) or 0)
+
+                if monto_total > 0:
+                    db.add(models.Deuda(
+                        tournament_id=tid, player_id=player.id,
+                        tipo=tipo_pago if tipo_pago in ("inscripcion","arbitraje") else "manual",
+                        fase=fase, monto=monto_total, concepto=concepto,
+                        config_tipo=f"xls_ab_{idx}",
+                    ))
+                if abono_val > 0:
+                    db.add(models.Payment(
+                        tournament_id=tid, player_id=player.id,
+                        payment_type=tipo_pago if tipo_pago in ("inscripcion","arbitraje") else "manual",
+                        phase=fase, amount=abono_val, notes=f"{concepto} (Excel)",
+                    ))
+
+        except Exception as e:
+            errores.append(f"{j.get('nombre','?')}: {str(e)}")
+
+    db.commit()
+    return {
+        "message": f"✅ {creados} jugadores nuevos · {actualizados} actualizados · {len(errores)} errores",
+        "creados": creados, "actualizados": actualizados, "errores": errores,
+    }
+def import_finances(
+    body: dict,
+    t: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    jugadores_data  = body.get("jugadores", [])
+    retirados_data  = body.get("retirados", [])
+    incluir_ret     = body.get("incluir_retirados", False)
+
+    todos = jugadores_data + (retirados_data if incluir_ret else [])
+    if not todos:
+        raise HTTPException(status_code=400, detail="No hay jugadores para importar")
+
+    if t:
+        tid = t
+    else:
+        active = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
+        if not active:
+            raise HTTPException(status_code=400, detail="No hay torneo activo")
+        tid = active.id
+
+    creados = 0; actualizados = 0; errores = []
 
     for j in todos:
         try:
             nombre = str(j.get("nombre", "")).strip()
             numero = int(j.get("numero", 0)) if j.get("numero") else 0
-            estado = j.get("estado", "activo")
+            cedula = str(j.get("cedula", "") or "").strip()
+            telefono = str(j.get("telefono", "") or "").strip()
+            tipo   = j.get("tipo", "activo")  # antiguo / nuevo
             if not nombre:
                 continue
 
-            # Buscar jugador existente por número o nombre
+            # ── Buscar jugador existente ──
             player = None
-            if numero:
+            # 1. Por cédula
+            if cedula and cedula not in ("0", ""):
+                player = db.query(models.Player).filter(
+                    models.Player.tournament_id == tid,
+                    models.Player.id_number == cedula,
+                ).first()
+            # 2. Por número de camiseta
+            if not player and numero:
                 player = db.query(models.Player).filter(
                     models.Player.tournament_id == tid,
                     models.Player.player_number == numero,
                 ).first()
+            # 3. Por nombre aproximado
             if not player:
-                # Buscar por primeras palabras del nombre
-                palabras = nombre.split()[:2]
+                palabras = nombre.split()
                 for palabra in palabras:
                     if len(palabra) > 3:
                         player = db.query(models.Player).filter(
@@ -497,78 +740,111 @@ def import_finances(
                             break
 
             if player:
-                # Actualizar datos básicos
+                # Actualizar datos y asegurar que esté activo
                 player.full_name = nombre
-                if numero:
-                    player.player_number = numero
+                if numero: player.player_number = numero
+                if cedula: player.id_number = cedula
+                if telefono: player.phone = telefono
+                player.is_active = True
+                player.status = "activo"
+                if j.get("salud"): player.health_info = j.get("salud")
                 actualizados += 1
             else:
                 # Crear jugador nuevo
                 player = models.Player(
                     tournament_id=tid,
                     full_name=nombre,
-                    player_number=numero,
-                    id_number=f"XLS-{tid}-{numero or nombre[:6].replace(' ','')}",
-                    status="inactivo" if estado == "retirado" else "activo",
+                    player_number=numero or 0,
+                    id_number=cedula or f"XLS-{tid}-{nombre[:8].replace(' ','')}",
+                    phone=telefono or None,
+                    health_info=j.get("salud") or None,
+                    is_active=True,
+                    status="activo",
                 )
                 db.add(player)
                 db.flush()
                 creados += 1
 
-            # ── SYNC TOTAL: borrar todo lo importado de Excel anteriormente ──
-            deudas_excel = db.query(models.Deuda).filter(
+            # ── SYNC: borrar pagos y deudas anteriores importados del Excel ──
+            db.query(models.Deuda).filter(
                 models.Deuda.player_id == player.id,
                 models.Deuda.config_tipo.like("xls_%"),
-            ).all()
-            for d in deudas_excel:
-                db.delete(d)
+            ).delete(synchronize_session=False)
 
-            pagos_excel = db.query(models.Payment).filter(
+            db.query(models.Payment).filter(
                 models.Payment.player_id == player.id,
-                models.Payment.notes.like("% (Excel)"),
-            ).all()
-            for p in pagos_excel:
-                db.delete(p)
+                models.Payment.notes.like("%(Excel)%"),
+            ).delete(synchronize_session=False)
 
             db.flush()
 
-            # ── Insertar datos actualizados ──
-            for key, concepto, fase in CONCEPTOS:
-                blk   = j.get(key, {})
-                total = float(blk.get("total", 0) or 0)
-                abono = float(blk.get("abono", 0) or 0)
+            # ── Insertar abonos del nuevo formato (lista de abonos) ──
+            abonos = j.get("abonos", [])
 
-                tag = f"xls_{key}"
+            if abonos:
+                # Nuevo formato flexible con lista de abonos
+                for idx, ab in enumerate(abonos):
+                    concepto   = ab.get("concepto", f"Concepto {idx+1}")
+                    tipo_pago  = ab.get("tipo", "manual")
+                    fase       = ab.get("fase", None)
+                    monto_total = float(ab.get("monto_total", 0) or 0)
+                    abono_val  = float(ab.get("abono", 0) or 0)
+                    tag        = f"xls_ab_{idx}"
 
-                if total > 0:
-                    db.add(models.Deuda(
-                        tournament_id=tid,
-                        player_id=player.id,
-                        tipo="inscripcion" if key == "inscripcion" else "arbitraje",
-                        fase=fase,
-                        monto=total,
-                        concepto=concepto,
-                        config_tipo=tag,
-                    ))
+                    if monto_total > 0:
+                        db.add(models.Deuda(
+                            tournament_id=tid,
+                            player_id=player.id,
+                            tipo=tipo_pago if tipo_pago in ("inscripcion","arbitraje") else "manual",
+                            fase=fase,
+                            monto=monto_total,
+                            concepto=concepto,
+                            config_tipo=tag,
+                        ))
 
-                if abono > 0:
-                    db.add(models.Payment(
-                        tournament_id=tid,
-                        player_id=player.id,
-                        payment_type="inscripcion" if key == "inscripcion" else "arbitraje",
-                        amount=abono,
-                        notes=f"{concepto} (Excel)",
-                    ))
+                    if abono_val > 0:
+                        db.add(models.Payment(
+                            tournament_id=tid,
+                            player_id=player.id,
+                            payment_type=tipo_pago if tipo_pago in ("inscripcion","arbitraje") else "manual",
+                            phase=fase,
+                            amount=abono_val,
+                            notes=f"{concepto} (Excel)",
+                        ))
+            else:
+                # Formato viejo (retrocompatibilidad)
+                CONCEPTOS = [
+                    ("inscripcion", "Inscripción torneo",    None),
+                    ("arb_f1",      "Arbitrajes Fase 1",     "Fase 1"),
+                    ("arb_f2",      "Arbitrajes Fase 2",     "Fase 2"),
+                    ("arb_f3",      "Arbitrajes Fase 3",     "Fase 3"),
+                ]
+                for key, concepto, fase in CONCEPTOS:
+                    blk   = j.get(key, {})
+                    total = float(blk.get("total", 0) or 0)
+                    abono = float(blk.get("abono", 0) or 0)
+                    tag   = f"xls_{key}"
+
+                    if total > 0:
+                        db.add(models.Deuda(
+                            tournament_id=tid, player_id=player.id,
+                            tipo="inscripcion" if key == "inscripcion" else "arbitraje",
+                            fase=fase, monto=total, concepto=concepto, config_tipo=tag,
+                        ))
+                    if abono > 0:
+                        db.add(models.Payment(
+                            tournament_id=tid, player_id=player.id,
+                            payment_type="inscripcion" if key == "inscripcion" else "arbitraje",
+                            amount=abono, notes=f"{concepto} (Excel)",
+                        ))
 
         except Exception as e:
             errores.append(f"{j.get('nombre','?')}: {str(e)}")
 
     db.commit()
     return {
-        "message":      f"✅ Sincronización completa: {creados} jugadores nuevos, {actualizados} actualizados",
-        "creados":      creados,
-        "actualizados": actualizados,
-        "errores":      errores,
+        "message": f"✅ {creados} jugadores nuevos · {actualizados} actualizados · {len(errores)} errores",
+        "creados": creados, "actualizados": actualizados, "errores": errores,
     }
 
 
@@ -736,7 +1012,7 @@ REGLAS:
 - IMPORTANTE: Si el boletín NO tiene resultado de MIRADOR II, pon ultimo_resultado_mirador: null
 
 BOLETÍN:
-{full_text[:6000]}
+{full_text[:9000]}
 """
 
 
@@ -745,7 +1021,7 @@ BOLETÍN:
         resp = c.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=3000,
+            max_tokens=4000,
             temperature=0.1,
         )
         raw = resp.choices[0].message.content
@@ -754,17 +1030,34 @@ BOLETÍN:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            # Intentar reparar JSON truncado añadiendo cierres
-            for closing in [']}', ']}]}', '}}', '}}}']:
+            # Intentar reparar JSON truncado con varias combinaciones
+            repaired = False
+            for closing in [']}', ']}]}', '}}', '}}}', ']}}}', '}}]}', ']}}', ']}]}}}']:
                 try:
                     data = json.loads(raw + closing)
+                    repaired = True
                     break
                 except:
                     pass
-            else:
+            if not repaired:
+                # Último intento: truncar al último objeto completo
+                last_brace = raw.rfind('},')
+                if last_brace > 0:
+                    try:
+                        data = json.loads(raw[:last_brace+1] + ']}}}')
+                        repaired = True
+                    except:
+                        pass
+            if not repaired:
                 raise HTTPException(status_code=500, detail="Error parseando respuesta de IA: JSON incompleto")
         return {"success": True, "data": data, "texto_extraido": len(full_text)}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error de IA: {str(e)}")
+        msg = str(e)
+        if "rate_limit_exceeded" in msg or "429" in msg:
+            import re
+            wait = re.search(r'try again in (\d+m[\d.]+s)', msg)
+            wt = f" Espera {wait.group(1)}." if wait else " Intenta en unos minutos."
+            raise HTTPException(status_code=429, detail=f"⏳ Límite diario de IA alcanzado.{wt}")
+        raise HTTPException(status_code=500, detail=f"Error de IA: {msg}")

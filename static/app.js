@@ -941,162 +941,15 @@ function renderAttendanceSection(wrap, data, matchId) {
           <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--lime);font-weight:700">${confirmed.length}/${total}</span>
           ${data.declined>0?`<span style="font-size:10px;color:rgba(255,100,100,0.8)">· ${data.declined} no van</span>`:''}
         </div>
-        <button onclick="openAttendanceModal(${matchId})"
+        ${state.isAdmin ? `<button onclick="openAttendanceModal(${matchId})"
           style="font-size:11px;padding:5px 12px;background:rgba(193,241,0,0.15);color:var(--lime);border:1px solid rgba(193,241,0,0.4);border-radius:20px;cursor:pointer;font-weight:600">
-          ${confirmed.length === 0 ? '¿Vas al partido? →' : '✏️ Confirmar'}
-        </button>
+          ✏️ Registrar
+        </button>` : ''}
       </div>
-      ${confirmed.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>` : '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-style:italic">Nadie ha confirmado aún</div>'}
+      ${confirmed.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>` : '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-style:italic">Sin asistencia registrada</div>'}
     </div>`;
 }
 
-function openAttendanceModal(matchId) {
-  const data = state.attendanceCache?.[matchId];
-
-  let modal = $('modal-attendance');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'modal-attendance';
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal" style="max-width:400px">
-        <div class="modal-header">
-          <h3>👥 Asistencia al partido</h3>
-          <button class="modal-close" onclick="closeModal('modal-attendance')">×</button>
-        </div>
-        <div class="modal-body" id="attendance-modal-body">
-          <div class="loading-wrap"><div class="spinner"></div></div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) closeModal('modal-attendance'); });
-  }
-
-  showModal('modal-attendance');
-  renderAttendanceModalBody(matchId);
-}
-
-async function renderAttendanceModalBody(matchId, selectedPlayerId = null) {
-  const body = $('attendance-modal-body');
-  if (!body) return;
-
-  // Cargar datos frescos
-  let data;
-  try {
-    data = await api(`/matches/${matchId}/attendance${tParam()}`);
-    if (!state.attendanceCache) state.attendanceCache = {};
-    state.attendanceCache[matchId] = data;
-  } catch(e) {
-    body.innerHTML = `<div style="color:var(--red);padding:12px">Error: ${e.message}</div>`;
-    return;
-  }
-
-  const stored = JSON.parse(localStorage.getItem('mirador_attendance') || '{}');
-  const myStatus = stored[matchId];
-
-  if (selectedPlayerId) {
-    // Pantalla de PIN
-    const player = data.players.find(p => p.player_id === selectedPlayerId);
-    const nombre = player ? `${player.player_number} ${player.full_name}` : '';
-    const currentStatus = player?.status;
-    body.innerHTML = `
-      <div style="text-align:center;margin-bottom:16px">
-        <div style="font-size:28px;margin-bottom:6px">🔑</div>
-        <div style="font-weight:700;font-size:16px;color:var(--navy)">${nombre}</div>
-        ${currentStatus !== 'pending' ? `<div style="font-size:12px;color:var(--text-faint);margin-top:4px">Estado actual: ${currentStatus==='confirmed'?'✅ Confirmado':'❌ No disponible'}</div>` : ''}
-      </div>
-      <label class="form-label">Tu PIN personal</label>
-      <input id="attendance-pin-input" class="form-input" type="password" inputmode="numeric"
-        maxlength="10" placeholder="Ingresa tu PIN"
-        style="text-align:center;font-size:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.2em;margin-bottom:8px"
-        onkeydown="if(event.key==='Enter') submitAttendanceModal(${matchId},${selectedPlayerId},'confirmed')"/>
-      <div id="attendance-pin-error" class="form-error"></div>
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button onclick="submitAttendanceModal(${matchId},${selectedPlayerId},'confirmed')"
-          style="flex:1;padding:10px;background:var(--lime);color:var(--navy);border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">✅ Voy al partido</button>
-        <button onclick="submitAttendanceModal(${matchId},${selectedPlayerId},'declined')"
-          style="flex:1;padding:10px;background:var(--surface-low);color:var(--red);border:1px solid var(--red);border-radius:8px;font-size:13px;cursor:pointer">❌ No puedo</button>
-      </div>
-      <button onclick="renderAttendanceModalBody(${matchId})"
-        style="width:100%;margin-top:8px;padding:8px;background:none;border:none;font-size:12px;color:var(--text-faint);cursor:pointer">← Volver a la lista</button>`;
-    setTimeout(() => $('attendance-pin-input')?.focus(), 100);
-    return;
-  }
-
-  // Lista de jugadores
-  const confirmed = data.players.filter(p => p.status === 'confirmed');
-  const pending   = data.players.filter(p => p.status === 'pending');
-  const declined  = data.players.filter(p => p.status === 'declined');
-
-  const playerRow = (p) => {
-    const icon = p.status==='confirmed' ? '✅' : p.status==='declined' ? '❌' : '⬜';
-    const isMine = myStatus && stored[matchId+'_pid'] === p.player_id;
-    return `<button onclick="renderAttendanceModalBody(${matchId},${p.player_id})"
-      style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border-light);border-radius:8px;background:${p.status==='confirmed'?'rgba(193,241,0,0.05)':p.status==='declined'?'rgba(255,0,0,0.03)':'var(--surface-low)'};cursor:pointer;text-align:left;margin-bottom:6px">
-      <span style="font-size:16px">${icon}</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);min-width:22px">${p.player_number}</span>
-      <span style="font-size:13px;font-weight:600;color:var(--navy);flex:1">${p.full_name}</span>
-      <span style="font-size:10px;color:var(--text-faint)">Cambiar →</span>
-    </button>`;
-  };
-
-  body.innerHTML = `
-    <div style="display:flex;gap:10px;margin-bottom:16px;text-align:center">
-      <div style="flex:1;background:rgba(193,241,0,0.08);border-radius:8px;padding:10px">
-        <div style="font-size:22px;font-weight:700;color:var(--navy)">${confirmed.length}</div>
-        <div style="font-size:11px;color:var(--text-faint)">Confirmados</div>
-      </div>
-      <div style="flex:1;background:rgba(255,0,0,0.05);border-radius:8px;padding:10px">
-        <div style="font-size:22px;font-weight:700;color:var(--red)">${declined.length}</div>
-        <div style="font-size:11px;color:var(--text-faint)">No van</div>
-      </div>
-      <div style="flex:1;background:var(--surface-low);border-radius:8px;padding:10px">
-        <div style="font-size:22px;font-weight:700;color:var(--text-faint)">${pending.length}</div>
-        <div style="font-size:11px;color:var(--text-faint)">Sin resp.</div>
-      </div>
-    </div>
-    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px">Selecciona tu nombre para confirmar con tu PIN:</div>
-    <div style="max-height:320px;overflow-y:auto">
-      ${data.players.map(p => playerRow(p)).join('')}
-    </div>
-    ${state.isAdmin ? `<div style="border-top:1px solid var(--border-light);margin-top:12px;padding-top:10px;font-size:11px;color:var(--text-faint)">Admin: toca cualquier jugador para editar su estado</div>` : ''}`;
-}
-
-async function submitAttendanceModal(matchId, playerId, status) {
-  const pin = $('attendance-pin-input')?.value?.trim() || '';
-  const errEl = $('attendance-pin-error');
-
-  if (!pin) {
-    if (errEl) errEl.textContent = 'Ingresa tu PIN';
-    $('attendance-pin-input')?.focus();
-    return;
-  }
-
-  try {
-    const res = await api(`/matches/${matchId}/attendance`, 'POST', { player_id: playerId, status, pin });
-    const stored = JSON.parse(localStorage.getItem('mirador_attendance') || '{}');
-    stored[matchId] = status;
-    stored[matchId + '_pid'] = playerId;
-    localStorage.setItem('mirador_attendance', JSON.stringify(stored));
-    toast(res.message);
-    closeModal('modal-attendance');
-    loadAttendanceSection(matchId);
-  } catch(e) {
-    if (errEl) { errEl.textContent = e.message; $('attendance-pin-input')?.select(); }
-    else toast(e.message, 'error');
-  }
-}
-
-function resetMyAttendance(matchId) {
-  loadAttendanceSection(matchId);
-}
-
-async function adminRemoveAttendance(matchId, playerId) {
-  try {
-    await api(`/matches/${matchId}/attendance/${playerId}`, 'DELETE');
-    loadAttendanceSection(matchId);
-  } catch(e) { toast(e.message, 'error'); }
-}
 
 function goSlide(idx) {
   const track=$('upcoming-track'), items=track.querySelectorAll('.match-card');
@@ -1420,7 +1273,6 @@ function renderPlayersGrid(players) {
         <div class="player-actions" style="flex-direction:column;align-items:flex-end;gap:6px">
           <div style="display:flex;gap:4px">
             <button class="btn-icon" onclick="openEditPlayerModal(${p.id})" title="Editar">✏️</button>
-            <button class="btn-icon" onclick="openPinModal(${p.id},'${p.full_name.split(' ')[0]}')" title="PIN asistencia" style="font-size:12px">${p.has_pin?'🔑':'🔓'}</button>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
             ${p.status!=='lesionado'&&p.status!=='inactivo'?`<button onclick="changePlayerStatus(${p.id},'lesionado')" style="font-size:10px;padding:3px 8px;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;cursor:pointer;color:#7a5200;font-weight:600">🟡 Lesión</button>`:''}
@@ -1546,8 +1398,105 @@ async function loadPayments() {
     state.finances=finances; state.configs=configs; state.players=players;
     renderPaymentsSummaryCards(finances);
     renderConfigsSection(configs);
-    renderFinancesTable(finances);
+    renderFinancesTableExcel(finances, configs);
   } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+function renderFinancesTableExcel(finances, configs) {
+  const wrap = $('payments-table-wrap');
+  if (!wrap) return;
+
+  const arbs = configs.arbitrajes || [];
+  const canEdit = state.isAdmin && !isViewingPast();
+
+  // Cabecera con botones de acción
+  let html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:0.04em">📊 Cuentas del torneo</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${canEdit ? `<button onclick="openQuickPayModal()" class="btn btn-primary" style="font-size:12px">💸 Registrar pago</button>` : ''}
+        <button onclick="exportarExcel()" class="btn btn-secondary" style="font-size:12px">📥 Exportar Excel</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border-light)">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">
+        <thead>
+          <tr style="background:var(--navy);color:#fff">
+            <th style="padding:8px 6px;text-align:center;font-size:10px;white-space:nowrap">#</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px">Nombre</th>
+            <th style="padding:8px 6px;text-align:center;font-size:10px;background:rgba(193,241,0,0.15)" colspan="2">Inscripción</th>
+            ${arbs.map((a,i) => `<th style="padding:8px 6px;text-align:center;font-size:10px;white-space:nowrap">P${i+1}</th>`).join('')}
+            <th style="padding:8px 6px;text-align:center;font-size:10px;background:rgba(193,241,0,0.1)" colspan="2">Arbitraje</th>
+            <th style="padding:8px 6px;text-align:center;font-size:10px;background:rgba(193,241,0,0.2)">Total</th>
+            ${canEdit ? `<th style="padding:8px 6px;text-align:center;font-size:10px"></th>` : ''}
+          </tr>
+          <tr style="background:rgba(13,33,55,0.85);color:rgba(255,255,255,0.7)">
+            <th></th><th></th>
+            <th style="padding:5px 6px;text-align:center;font-size:9px">Abono</th>
+            <th style="padding:5px 6px;text-align:center;font-size:9px">Debe</th>
+            ${arbs.map(a => `<th style="padding:5px 6px;text-align:center;font-size:9px">${fmt(a.amount_per_player)}</th>`).join('')}
+            <th style="padding:5px 6px;text-align:center;font-size:9px">Abono</th>
+            <th style="padding:5px 6px;text-align:center;font-size:9px">Debe</th>
+            <th style="padding:5px 6px;text-align:center;font-size:9px">Abonado</th>
+            ${canEdit ? `<th></th>` : ''}
+          </tr>
+        </thead>
+        <tbody>`;
+
+  let sumAbonoInsc=0, sumDebeInsc=0, sumAbonoArb=0, sumDebeArb=0, sumTotal=0;
+
+  finances.forEach((p, i) => {
+    const abonoInsc = p.pago_inscripcion ?? 0;
+    const debeInsc  = Math.max(0, (p.deuda_inscripcion ?? 0) - abonoInsc);
+    const abonoArb  = p.pago_arbitraje ?? 0;
+    const debeArb   = Math.max(0, (p.deuda_arbitraje ?? 0) - abonoArb);
+    const total     = abonoInsc + abonoArb;
+    const alDia     = p.saldo_pendiente <= 0;
+    const bg        = i%2===0 ? '' : 'background:var(--surface-low)';
+
+    sumAbonoInsc+=abonoInsc; sumDebeInsc+=debeInsc;
+    sumAbonoArb+=abonoArb; sumDebeArb+=debeArb; sumTotal+=total;
+
+    html += `<tr style="border-bottom:1px solid var(--border-light);${bg}${p.status==='inactivo'?';opacity:0.5':''}">
+      <td style="padding:8px 6px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint)">${p.player_number}</td>
+      <td style="padding:8px 10px;font-weight:600;color:var(--navy)">${p.player_name}</td>
+      <td style="padding:8px 6px;text-align:right;color:var(--green);font-family:'JetBrains Mono',monospace">${fmt(abonoInsc)}</td>
+      <td style="padding:8px 6px;text-align:right;color:${debeInsc>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace">${debeInsc>0?fmt(debeInsc):'✓'}</td>
+      ${arbs.map(a => `<td style="padding:8px 6px;text-align:center;font-size:11px;color:var(--text-faint)">✓</td>`).join('')}
+      <td style="padding:8px 6px;text-align:right;color:var(--green);font-family:'JetBrains Mono',monospace">${fmt(abonoArb)}</td>
+      <td style="padding:8px 6px;text-align:right;color:${debeArb>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace">${debeArb>0?fmt(debeArb):'✓'}</td>
+      <td style="padding:8px 6px;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--navy)">${fmt(total)}</td>
+      ${canEdit ? `<td style="padding:8px 6px;text-align:center">
+        <button onclick="openQuickPayModal(${p.player_id})" style="font-size:10px;padding:3px 8px;background:var(--lime);color:var(--navy);border:none;border-radius:4px;cursor:pointer;font-weight:700">+</button>
+        <button onclick="togglePlayerHistory(${p.player_id})" style="font-size:10px;padding:3px 8px;background:var(--surface-low);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:2px">≡</button>
+      </td>` : ''}
+    </tr>
+    <tr class="payment-detail-row" id="detail-${p.player_id}" style="display:none">
+      <td colspan="${6 + arbs.length + (canEdit?3:2)}">
+        <div class="payment-detail-inner" id="history-content-${p.player_id}">
+          <div style="text-align:center;padding:20px;color:var(--text-faint)">Cargando historial...</div>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  // Fila de totales
+  html += `</tbody>
+    <tfoot>
+      <tr style="background:var(--navy);color:#fff;font-weight:700">
+        <td colspan="2" style="padding:8px 10px;font-family:'Oswald',sans-serif;letter-spacing:0.05em">TOTALES</td>
+        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace">${fmt(sumAbonoInsc)}</td>
+        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeInsc>0?'#ff9999':'#99ff99'}">${fmt(sumDebeInsc)}</td>
+        ${arbs.map(() => `<td></td>`).join('')}
+        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace">${fmt(sumAbonoArb)}</td>
+        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeArb>0?'#ff9999':'#99ff99'}">${fmt(sumDebeArb)}</td>
+        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumTotal)}</td>
+        ${canEdit ? `<td></td>` : ''}
+      </tr>
+    </tfoot>
+  </table></div>`;
+
+  wrap.innerHTML = html;
 }
 
 function renderPaymentsSummaryCards(finances) {
@@ -1661,80 +1610,88 @@ function renderPlayerHistory(wrap, data, playerId) {
   const movs = data.movimientos || [];
   const isAdmin = state.isAdmin && !isViewingPast();
 
+  // Separar deudas y pagos por tipo
+  const deudaInsc = movs.filter(m => m.tipo === 'deuda' && (m.concepto||'').toLowerCase().includes('inscri'));
+  const deudaArb  = movs.filter(m => m.tipo === 'deuda' && (m.concepto||'').toLowerCase().includes('arb'));
+  const pagosInsc = movs.filter(m => m.tipo !== 'deuda' && (m.concepto||'').toLowerCase().includes('inscri'));
+  const pagosArb  = movs.filter(m => m.tipo !== 'deuda' && (m.concepto||'').toLowerCase().includes('arb'));
+  const pagosOtros= movs.filter(m => m.tipo !== 'deuda' && !((m.concepto||'').toLowerCase().includes('inscri') || (m.concepto||'').toLowerCase().includes('arb')));
+
+  const totalDeudaInsc = deudaInsc.reduce((s,m) => s + m.monto, 0);
+  const totalDeudaArb  = deudaArb.reduce((s,m) => s + m.monto, 0);
+  const totalPagInsc   = pagosInsc.reduce((s,m) => s + Math.abs(m.monto), 0);
+  const totalPagArb    = pagosArb.reduce((s,m) => s + Math.abs(m.monto), 0);
+  const totalPagOtros  = pagosOtros.reduce((s,m) => s + Math.abs(m.monto), 0);
+
+  const tarjeta = (label, deuda, pagado, color) => {
+    const debe = Math.max(0, deuda - pagado);
+    const pct = deuda > 0 ? Math.min(100, Math.round(pagado/deuda*100)) : 100;
+    return `<div style="background:var(--surface-low);border-radius:8px;padding:10px 12px;flex:1;min-width:140px">
+      <div style="font-size:10px;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">${label}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--green)">Abono: ${fmt(pagado)}</span>
+        <span style="font-size:11px;color:${debe>0?'var(--red)':'var(--green)'}">${debe>0?'Debe: '+fmt(debe):'✅ Al día'}</span>
+      </div>
+      <div style="background:var(--border-light);border-radius:4px;height:6px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:4px"></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-faint);margin-top:3px">Total: ${fmt(deuda)}</div>
+    </div>`;
+  };
+
   const resumenHTML = `
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:8px;padding:10px">
-        <div style="font-size:11px;color:var(--text-faint)">Total deuda</div>
-        <div style="font-weight:700;color:var(--red)">${fmt(r.total_deuda)}</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:#e8f5e9;border-radius:8px;padding:10px">
-        <div style="font-size:11px;color:var(--text-faint)">Total pagado</div>
-        <div style="font-weight:700;color:var(--green)">${fmt(r.total_pagado)}</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:${r.saldo_pendiente<=0?'#e8f5e9':'#fff3e0'};border-radius:8px;padding:10px">
-        <div style="font-size:11px;color:var(--text-faint)">Saldo pendiente</div>
-        <div style="font-weight:700;color:${r.saldo_pendiente<=0?'var(--green)':'#e65100'}">${r.saldo_pendiente<=0?'✅ Paz y salvo':fmt(r.saldo_pendiente)}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      ${totalDeudaInsc > 0 ? tarjeta('Inscripción', totalDeudaInsc, totalPagInsc, 'var(--navy)') : ''}
+      ${totalDeudaArb > 0 ? tarjeta('Arbitrajes', totalDeudaArb, totalPagArb, '#1565c0') : ''}
+      <div style="background:rgba(193,241,0,0.08);border:1px solid rgba(193,241,0,0.3);border-radius:8px;padding:10px 12px;flex:1;min-width:140px">
+        <div style="font-size:10px;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Total pagado</div>
+        <div style="font-family:'Oswald',sans-serif;font-size:20px;font-weight:700;color:var(--navy)">${fmt(r.total_pagado)}</div>
+        <div style="font-size:11px;color:${r.saldo_pendiente<=0?'var(--green)':'var(--red)'}">
+          ${r.saldo_pendiente<=0?'✅ Paz y salvo':'Pendiente: '+fmt(r.saldo_pendiente)}
+        </div>
       </div>
     </div>`;
 
-  const movsHTML = movs.length ? `
-    <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy)">📋 Historial de movimientos</div>
-    <div style="max-height:280px;overflow-y:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:var(--surface-low)">
-          <th style="padding:6px 8px;text-align:left">Fecha</th>
-          <th style="padding:6px 8px;text-align:left">Concepto</th>
-          <th style="padding:6px 8px;text-align:left">Fuente</th>
-          <th style="padding:6px 8px;text-align:right">Monto</th>
-          <th style="padding:6px 8px;text-align:center">Tipo</th>
-        </tr></thead>
-        <tbody>
-          ${movs.map((m,i) => {
-            const esDeuda = m.tipo === 'deuda';
-            const esNeg = m.monto < 0;
-            const iconos = {deuda:'🔴', pago:'🟢', ajuste_negativo:'🟠', ajuste:'🟡'};
-            return `<tr style="border-bottom:1px solid var(--border-light);background:${i%2===0?'':'var(--surface-low)'}">
-              <td style="padding:5px 8px;font-family:monospace;font-size:11px">${m.fecha}</td>
-              <td style="padding:5px 8px">${m.concepto||''}</td>
-              <td style="padding:5px 8px"><span style="font-size:10px;background:${m.fuente==='Excel'?'#e3f2fd':'#f3e5f5'};border-radius:3px;padding:1px 5px">${m.fuente}</span></td>
-              <td style="padding:5px 8px;text-align:right;font-weight:700;color:${esDeuda?'var(--red)':esNeg?'#e65100':'var(--green)'}">${esDeuda?'+':esNeg?'±':'–'} ${fmt(Math.abs(m.monto))}</td>
-              <td style="padding:5px 8px;text-align:center">${iconos[m.tipo]||'⚪'}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>` : '<div style="color:var(--text-faint);font-size:13px;padding:8px 0">Sin movimientos registrados</div>';
+  // Tabla de movimientos agrupada por tipo
+  const filasMov = (lista, titulo, colorTipo) => {
+    if (!lista.length) return '';
+    return `
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:${colorTipo};margin-bottom:6px;padding:4px 8px;background:${colorTipo}15;border-radius:4px;border-left:3px solid ${colorTipo}">${titulo}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:var(--surface-low)">
+            <th style="padding:5px 8px;text-align:left;color:var(--text-faint);font-weight:600">Fecha</th>
+            <th style="padding:5px 8px;text-align:left;color:var(--text-faint);font-weight:600">Concepto</th>
+            <th style="padding:5px 8px;text-align:right;color:var(--text-faint);font-weight:600">Monto</th>
+          </tr></thead>
+          <tbody>
+            ${lista.map((m,i) => {
+              const esDeuda = m.tipo === 'deuda';
+              const color = esDeuda ? 'var(--red)' : 'var(--green)';
+              const signo = esDeuda ? '+' : '–';
+              return `<tr style="border-bottom:1px solid var(--border-light);background:${i%2===0?'':'var(--surface-low)'}">
+                <td style="padding:5px 8px;font-family:monospace;font-size:10px">${m.fecha}</td>
+                <td style="padding:5px 8px">${m.concepto||'—'}</td>
+                <td style="padding:5px 8px;text-align:right;font-weight:700;color:${color}">${signo} ${fmt(Math.abs(m.monto))}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  };
 
-  const ajusteHTML = isAdmin ? `
-    <div style="margin-top:14px;border-top:1px solid var(--border-light);padding-top:14px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--navy)">➕ Registrar movimiento</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-        <div style="flex:2;min-width:140px">
-          <label class="form-label">Concepto *</label>
-          <input class="form-input" id="adj-concepto-${playerId}" placeholder="Ej: Abono partido 3, Multa, Corrección..." style="font-size:13px"/>
-        </div>
-        <div style="flex:1;min-width:110px">
-          <label class="form-label">Monto *</label>
-          <input class="form-input" id="adj-monto-${playerId}" type="number" placeholder="50000" style="font-size:13px"/>
-        </div>
-        <div style="flex:1;min-width:110px">
-          <label class="form-label">Fecha</label>
-          <input class="form-input" id="adj-fecha-${playerId}" type="date" value="${new Date().toISOString().split('T')[0]}" style="font-size:13px"/>
-        </div>
-        <div style="flex:1;min-width:100px">
-          <label class="form-label">Tipo</label>
-          <select class="form-input" id="adj-tipo-${playerId}" style="font-size:13px">
-            <option value="pago">💚 Abono/Pago</option>
-            <option value="cargo">🔴 Cargo adicional</option>
-            <option value="ajuste">🟠 Ajuste/Corrección</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" style="font-size:13px;white-space:nowrap" onclick="saveAdjustment(${playerId})">Guardar</button>
-      </div>
-    </div>` : '';
+  const movsHTML = `
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy)">📋 Movimientos</div>
+    ${filasMov([...deudaInsc,...pagosInsc], '💰 Inscripción', 'var(--navy)')}
+    ${filasMov([...deudaArb,...pagosArb], '⚽ Arbitrajes', '#1565c0')}
+    ${filasMov(pagosOtros, '📝 Abonos generales', '#2e7d32')}
+    ${!movs.length ? '<div style="color:var(--text-faint);font-size:13px;padding:8px 0">Sin movimientos registrados</div>' : ''}`;
+
+  const ajusteHTML = '';  // El pago se registra desde "💸 Registrar pago"
 
   wrap.innerHTML = resumenHTML + movsHTML + ajusteHTML;
 }
+
 
 async function saveAdjustment(playerId) {
   const concepto = $(`adj-concepto-${playerId}`)?.value?.trim();
@@ -1777,6 +1734,204 @@ function deleteArbitrajePhase(id) {
   confirmar({icon:'🗑️', titulo:'¿Eliminar fase?', msg:'Se eliminarán la fase y todas las deudas de arbitraje asignadas.'}, async ok => {
     if(!ok)return; try{await api(`/finances/arbitraje-phase/${id}`,'DELETE');toast('Fase eliminada');loadPayments();}catch(e){toast(e.message,'error');}
   });
+}
+
+// ── PAGO RÁPIDO ───────────────────────────────────────────────────
+async function openQuickPayModal(preselectedPlayerId = null) {
+  // Siempre cargar configs frescos para tener los partidos actualizados
+  try {
+    const [configs, players] = await Promise.all([
+      api(`/finances/configs${tParam()}`),
+      state.players?.length ? Promise.resolve(state.players) : api(`/players${tParam()}${tParam()?'&':'?'}include_inactive=false`),
+    ]);
+    state.configs = configs;
+    if (!state.players?.length) state.players = players;
+  } catch(e) { toast('Error cargando configuración', 'error'); return; }
+  let modal = $('modal-quick-pay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-quick-pay';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+          <h3>💸 Registrar pago</h3>
+          <button class="modal-close" onclick="closeModal('modal-quick-pay')">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom:12px">
+            <label class="form-label">Jugador *</label>
+            <select id="qp-player" class="form-input"></select>
+          </div>
+          <div style="margin-bottom:12px">
+            <label class="form-label">¿Para qué es el pago? *</label>
+            <select id="qp-concepto" class="form-input"></select>
+            <div id="qp-saldo-hint" style="font-size:11px;margin-top:4px"></div>
+          </div>
+          <div style="margin-bottom:12px">
+            <label class="form-label">Monto *</label>
+            <input id="qp-monto" type="number" class="form-input" placeholder="Ej: 50000"/>
+          </div>
+          <div style="margin-bottom:12px">
+            <label class="form-label">Fecha</label>
+            <input id="qp-fecha" type="date" class="form-input"/>
+          </div>
+          <div style="margin-bottom:12px">
+            <label class="form-label">Notas (opcional)</label>
+            <input id="qp-notas" type="text" class="form-input" placeholder="Ej: Transferencia bancaria"/>
+          </div>
+          <div id="qp-error" class="form-error"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('modal-quick-pay')">Cancelar</button>
+          <button class="btn btn-primary" onclick="saveQuickPay()">💾 Guardar pago</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal('modal-quick-pay'); });
+  }
+
+  // Llenar jugadores
+  const playerSel = $('qp-player');
+  playerSel.innerHTML = state.players
+    .filter(p => p.is_active)
+    .map(p => `<option value="${p.id}" ${p.id===preselectedPlayerId?'selected':''}>${p.player_number} — ${p.full_name}</option>`)
+    .join('');
+
+  // Llenar conceptos
+  const conceptoSel = $('qp-concepto');
+  const arbs = state.configs?.arbitrajes || [];
+  const insc = state.configs?.inscripciones?.[0];
+  const opts = [];
+  if (insc) {
+    opts.push(`<option value="inscripcion|">💰 Inscripción — ${fmt(insc.amount_per_player)} c/u</option>`);
+  } else {
+    opts.push(`<option value="inscripcion|">💰 Inscripción</option>`);
+  }
+  if (arbs.length) {
+    arbs.forEach((a, i) => {
+      const label = a.fase || `Partido ${i+1}`;
+      opts.push(`<option value="arbitraje|${a.fase}">⚽ Arbitraje — ${label} (${fmt(a.amount_per_player)} c/u)</option>`);
+    });
+  } else {
+    // Si no hay fases configuradas, mostrar partidos genéricos
+    for (let i = 1; i <= 6; i++) {
+      opts.push(`<option value="arbitraje|Partido ${i}">⚽ Arbitraje — Partido ${i}</option>`);
+    }
+  }
+  opts.push(`<option value="ajuste|">📝 Abono general</option>`);
+  conceptoSel.innerHTML = opts.join('');
+
+  // Mostrar saldo disponible al cambiar jugador o concepto
+  const actualizarSaldo = () => {
+    const pid = +$('qp-player')?.value;
+    const [t2] = ($('qp-concepto')?.value || '').split('|');
+    const j = state.finances?.find(f => f.player_id === pid);
+    const hint = $('qp-saldo-hint');
+    if (!hint || !j) return;
+    if (t2 === 'inscripcion') {
+      const disp = Math.max(0, (j.deuda_inscripcion||0) - (j.pago_inscripcion||0));
+      hint.textContent = disp > 0 ? `💡 Queda por pagar: ${fmt(disp)}` : '✅ Inscripción completa';
+      hint.style.color = disp > 0 ? 'var(--text-faint)' : 'var(--green)';
+    } else if (t2 === 'arbitraje') {
+      const disp = Math.max(0, (j.deuda_arbitraje||0) - (j.pago_arbitraje||0));
+      hint.textContent = disp > 0 ? `💡 Queda por pagar: ${fmt(disp)}` : '✅ Arbitrajes completos';
+      hint.style.color = disp > 0 ? 'var(--text-faint)' : 'var(--green)';
+    } else {
+      hint.textContent = '';
+    }
+  };
+  $('qp-player')?.addEventListener('change', actualizarSaldo);
+  $('qp-concepto')?.addEventListener('change', actualizarSaldo);
+
+  // Fecha de hoy
+  $('qp-fecha').value = new Date().toISOString().split('T')[0];
+  $('qp-monto').value = '';
+  $('qp-notas').value = '';
+  clearError('qp-error');
+  showModal('modal-quick-pay');
+  setTimeout(() => $('qp-monto')?.focus(), 100);
+}
+
+async function saveQuickPay() {
+  const playerId = +$('qp-player').value;
+  const conceptoVal = $('qp-concepto').value || '';
+  const [tipo, fase] = conceptoVal.split('|');
+  const monto = parseFloat($('qp-monto').value || '0');
+  const fecha = $('qp-fecha').value;
+  const notas = $('qp-notas').value.trim();
+
+  if (!playerId || !monto || monto <= 0) { showError('qp-error', 'Jugador y monto son obligatorios'); return; }
+
+  // ── Validación: no sobrepagar ──
+  const jugador = state.finances?.find(f => f.player_id === playerId);
+  if (jugador) {
+    if (tipo === 'inscripcion') {
+      const deuda = jugador.deuda_inscripcion || 0;
+      const pagado = jugador.pago_inscripcion || 0;
+      const disponible = deuda - pagado;
+      if (disponible <= 0) {
+        showError('qp-error', `✅ ${jugador.player_name} ya tiene la inscripción pagada completa`);
+        return;
+      }
+      if (monto > disponible) {
+        showError('qp-error', `⚠️ Solo quedan ${fmt(disponible)} por pagar de inscripción. No puedes ingresar ${fmt(monto)}`);
+        return;
+      }
+    } else if (tipo === 'arbitraje') {
+      const deuda = jugador.deuda_arbitraje || 0;
+      const pagado = jugador.pago_arbitraje || 0;
+      const disponible = deuda - pagado;
+      if (disponible <= 0) {
+        showError('qp-error', `✅ ${jugador.player_name} ya tiene los arbitrajes pagados completos`);
+        return;
+      }
+      if (monto > disponible) {
+        showError('qp-error', `⚠️ Solo quedan ${fmt(disponible)} por pagar de arbitrajes. No puedes ingresar ${fmt(monto)}`);
+        return;
+      }
+    }
+  }
+
+  try {
+    const tq = tParam();
+    if (tipo === 'inscripcion' || tipo === 'arbitraje') {
+      await api(`/finances/payment${tq}`, 'POST', {
+        player_id: playerId,
+        payment_type: tipo,
+        phase: fase || null,
+        amount: monto,
+        notes: notas || (tipo === 'inscripcion' ? 'Abono inscripción' : `Abono arbitraje${fase ? ' — ' + fase : ''}`),
+      });
+    } else {
+      await api(`/finances/adjustment${tq}`, 'POST', {
+        player_id: playerId,
+        concepto: notas || 'Abono general',
+        monto,
+        fecha,
+        tipo: 'pago',
+      });
+    }
+    toast('✅ Pago registrado');
+    closeModal('modal-quick-pay');
+    loadPayments();
+  } catch(e) { showError('qp-error', e.message); }
+}
+
+async function exportarExcel() {
+  try {
+    const tq = tParam();
+    const res = await fetch(`/api/finances/export-excel${tq}`, {
+      headers: state.token ? { 'Authorization': `Bearer ${state.token}` } : {},
+    });
+    if (!res.ok) { toast('Error exportando', 'error'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'cuentas_mirador_ii.xlsx';
+    a.click(); URL.revokeObjectURL(url);
+    toast('✅ Excel descargado');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function openAddPaymentModal(preselectedPlayerId=null){
@@ -2110,6 +2265,7 @@ async function handleFileSelect(input) {
     aiFileData = data.jugadores || [];
     aiFileDataRetirados = data.retirados || [];
     const formato = data.formato || 'simple';
+    if (aiFileData.length) aiFileData._resumen = data.resumen || {};
 
     if (formato === 'excel_mirador') {
       renderFilePreviewCompleto(aiFileData, aiFileDataRetirados, file.name);
@@ -2132,63 +2288,76 @@ function _fmtConcepto(blk) {
 }
 
 function renderFilePreviewCompleto(jugadores, retirados, filename) {
-  const totalDebe = jugadores.reduce((s,j) => s + (j.total_debe||0), 0);
-  const totalAbono = jugadores.reduce((s,j) => s + (j.total_abono||0), 0);
+  const resumen = aiFileData._resumen || {};
+  const totalAbonado = jugadores.reduce((s,j) => s + (j.total_abonado||0), 0);
+  const nuevos = jugadores.filter(j => j.es_nuevo_en_app).length;
+  const existentes = jugadores.length - nuevos;
 
-  const filas = (list, esRetirado) => list.map((j,i) => {
-    const bg = esRetirado ? '#fff8f0' : (i%2===0 ? 'var(--surface-low)' : '');
-    const d = j.total_debe || 0;
+  // Recopilar todos los conceptos únicos para hacer columnas
+  const conceptosSet = new Set();
+  jugadores.forEach(j => (j.abonos||[]).forEach(a => conceptosSet.add(a.concepto)));
+  const conceptos = Array.from(conceptosSet);
+
+  const fila = (j, esRetirado) => {
+    const bg = esRetirado ? '#fff8f0' : '';
+    const abonoMap = {};
+    (j.abonos||[]).forEach(a => { abonoMap[a.concepto] = a; });
+
     return `<tr style="border-bottom:1px solid var(--border-light);background:${bg}">
-      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy)">${j.numero||'-'}</td>
-      <td style="padding:5px 8px;font-weight:600;font-size:12px">${j.nombre}${esRetirado?' <span style="font-size:10px;color:#e67e22;background:#fff3cd;padding:1px 4px;border-radius:3px">Ret.</span>':''}</td>
-      ${_fmtConcepto(j.inscripcion)}
-      ${_fmtConcepto(j.arb_f1)}
-      ${_fmtConcepto(j.arb_f2)}
-      ${_fmtConcepto(j.arb_f3)}
-      <td style="padding:5px 8px;text-align:right;font-weight:700;font-size:12px;color:${d>0?'#c0392b':'#27ae60'}">${d>0?fmt(d):'✓ Paz y Salvo'}</td>
+      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy)">${j.numero||'—'}</td>
+      <td style="padding:5px 8px;font-weight:600;font-size:12px">
+        ${j.nombre}
+        ${j.es_nuevo_en_app ? '<span style="font-size:10px;background:var(--lime);color:var(--navy);padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:700">NUEVO</span>' : ''}
+        ${j.tipo==='antiguo' ? '<span style="font-size:10px;background:rgba(0,0,0,0.06);color:var(--text-faint);padding:1px 5px;border-radius:3px;margin-left:4px">antiguo</span>' : ''}
+      </td>
+      ${conceptos.map(c => {
+        const ab = abonoMap[c];
+        if (!ab) return `<td style="padding:5px 8px;text-align:right;color:var(--text-faint)">—</td>`;
+        const color = ab.abono > 0 ? 'var(--green)' : ab.monto_total > 0 ? 'var(--red)' : 'var(--text-faint)';
+        return `<td style="padding:5px 8px;text-align:right;font-size:11px;color:${color};font-weight:600">${ab.abono>0?fmt(ab.abono):ab.monto_total>0?`Debe ${fmt(ab.monto_total)}`:'—'}</td>`;
+      }).join('')}
+      <td style="padding:5px 8px;text-align:right;font-weight:700;color:var(--navy);font-size:12px">${fmt(j.total_abonado||0)}</td>
     </tr>`;
-  }).join('');
+  };
 
-  $('file-preview-title').textContent = `📋 ${jugadores.length} activos + ${retirados.length} retirados — "${filename}"`;
+  $('file-preview-title').textContent = `📋 ${jugadores.length} jugadores — "${filename}"`;
   $('file-preview-table').innerHTML = `
-    <div style="overflow-x:auto">
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div style="background:var(--surface-low);border-radius:8px;padding:10px 16px;flex:1;min-width:140px">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Total abonado</div>
-          <div style="font-size:16px;font-weight:700;color:var(--green)">${fmt(totalAbono)}</div>
-        </div>
-        <div style="background:var(--surface-low);border-radius:8px;padding:10px 16px;flex:1;min-width:140px">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Total pendiente</div>
-          <div style="font-size:16px;font-weight:700;color:var(--red)">${fmt(totalDebe)}</div>
-        </div>
-        <div style="background:var(--surface-low);border-radius:8px;padding:10px 16px;flex:1;min-width:140px">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Al día</div>
-          <div style="font-size:16px;font-weight:700;color:var(--navy)">${jugadores.filter(j=>(j.total_debe||0)===0).length} / ${jugadores.length}</div>
-        </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="background:rgba(193,241,0,0.1);border:1px solid var(--lime);border-radius:8px;padding:10px 14px;flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--text-faint)">Total abonado</div>
+        <div style="font-size:18px;font-weight:700;color:var(--navy)">${fmt(totalAbonado)}</div>
       </div>
+      <div style="background:var(--surface-low);border-radius:8px;padding:10px 14px;flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--text-faint)">Jugadores nuevos</div>
+        <div style="font-size:18px;font-weight:700;color:var(--navy)">${nuevos}</div>
+      </div>
+      <div style="background:var(--surface-low);border-radius:8px;padding:10px 14px;flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--text-faint)">Ya en la app</div>
+        <div style="font-size:18px;font-weight:700;color:var(--navy)">${existentes}</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead>
-          <tr style="background:var(--navy);color:#fff">
-            <th style="padding:7px 8px;text-align:left">#</th>
-            <th style="padding:7px 8px;text-align:left">Nombre</th>
-            <th style="padding:7px 8px;text-align:right">Inscripción</th>
-            <th style="padding:7px 8px;text-align:right">Arb F1</th>
-            <th style="padding:7px 8px;text-align:right">Arb F2</th>
-            <th style="padding:7px 8px;text-align:right">Arb F3</th>
-            <th style="padding:7px 8px;text-align:right">Total Debe</th>
-          </tr>
-        </thead>
+        <thead><tr style="background:var(--navy);color:#fff">
+          <th style="padding:7px 8px;text-align:left">#</th>
+          <th style="padding:7px 8px;text-align:left">Nombre</th>
+          ${conceptos.map(c => `<th style="padding:7px 8px;text-align:right;font-size:10px;white-space:nowrap">${c}</th>`).join('')}
+          <th style="padding:7px 8px;text-align:right">Total Abonado</th>
+        </tr></thead>
         <tbody>
-          ${filas(jugadores, false)}
-          ${retirados.length ? `<tr><td colspan="7" style="padding:6px 8px;background:#fff3cd;font-size:11px;color:#856404;font-weight:600">⚠️ Jugadores retirados / expulsados</td></tr>${filas(retirados, true)}` : ''}
+          ${jugadores.map(j => fila(j, false)).join('')}
+          ${retirados.length ? `<tr><td colspan="${2+conceptos.length+1}" style="padding:6px 8px;background:#fff3cd;font-size:11px;color:#856404;font-weight:600">⚠️ Retirados / expulsados</td></tr>${retirados.map(j=>fila(j,true)).join('')}` : ''}
         </tbody>
       </table>
-      ${retirados.length ? `<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="chk-include-retirados"> Importar también jugadores retirados
-      </label>` : ''}
-    </div>`;
+    </div>
+    ${retirados.length ? `<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="chk-include-retirados"> Importar también jugadores retirados
+    </label>` : ''}
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;cursor:pointer;background:#fff3cd;padding:8px 10px;border-radius:6px;border:1px solid #f0c040">
+      <input type="checkbox" id="chk-limpiar-primero">
+      <span>⚠️ <strong>Importación limpia</strong> — borra todos los jugadores del torneo actual y los crea de cero</span>
+    </label>`;
   $('file-preview').style.display = 'block';
-  // Actualizar botón para usar import-finances
   const btn = $('btn-import-players');
   if (btn) { btn.dataset.modo = 'finances'; btn.textContent = '✅ Importar todo a la app'; }
 }
@@ -2231,11 +2400,14 @@ async function importPlayers() {
     let res;
     if (modo === 'finances') {
       const chk = $('chk-include-retirados');
+      const chkLimpiar = $('chk-limpiar-primero');
       const incluirRet = chk ? chk.checked : false;
+      const limpiarPrimero = chkLimpiar ? chkLimpiar.checked : false;
       res = await api(`/ai/import-finances${tq}`, 'POST', {
         jugadores: aiFileData,
         retirados: aiFileDataRetirados || [],
         incluir_retirados: incluirRet,
+        limpiar_primero: limpiarPrimero,
       });
     } else {
       res = await api(`/ai/import-players${tq}`, 'POST', { jugadores: aiFileData });
@@ -2246,6 +2418,7 @@ async function importPlayers() {
     $('file-input').value = '';
     aiFileData = null; aiFileDataRetirados = [];
     state.players = [];
+    setTimeout(() => { loadPlayers(); loadPayments(); }, 500);
   } catch(e) { toast(e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = '✅ Importar a la app'; }
 }
