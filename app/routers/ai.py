@@ -637,26 +637,52 @@ def import_finances(
                 db.flush()
                 creados += 1
 
-            # ── Borrar datos previos de Excel para este jugador ──
+            # ── Borrar SOLO deudas previas de Excel (no pagos manuales) ──
             db.query(models.Deuda).filter(
                 models.Deuda.player_id == player.id,
                 models.Deuda.config_tipo.like("xls_%"),
             ).delete(synchronize_session=False)
-            db.query(models.Payment).filter(
-                models.Payment.player_id == player.id,
-                models.Payment.notes.like("%(Excel)%"),
-            ).delete(synchronize_session=False)
             db.flush()
 
-            # ── Insertar abonos ──
+            # ── Calcular lo que ya hay pagado por concepto (manual + excel previos) ──
+            pagos_insc_existentes = sum(
+                p.amount for p in db.query(models.Payment).filter(
+                    models.Payment.player_id == player.id,
+                    models.Payment.tournament_id == tid,
+                    models.Payment.payment_type == "inscripcion",
+                ).all()
+            )
+            pagos_arb_existentes = sum(
+                p.amount for p in db.query(models.Payment).filter(
+                    models.Payment.player_id == player.id,
+                    models.Payment.tournament_id == tid,
+                    models.Payment.payment_type == "arbitraje",
+                ).all()
+            )
+
+            # ── Insertar deudas y registrar SOLO la diferencia en pagos ──
             abonos = j.get("abonos", [])
+
+            # Agrupar abonos por tipo para calcular diferencia total
+            total_abono_insc_excel = sum(
+                float(ab.get("abono", 0) or 0)
+                for ab in abonos if ab.get("tipo") == "inscripcion"
+            )
+            total_abono_arb_excel = sum(
+                float(ab.get("abono", 0) or 0)
+                for ab in abonos if ab.get("tipo") == "arbitraje"
+            )
+
+            diferencia_insc = max(0, total_abono_insc_excel - pagos_insc_existentes)
+            diferencia_arb  = max(0, total_abono_arb_excel  - pagos_arb_existentes)
+
             for idx, ab in enumerate(abonos):
                 concepto    = ab.get("concepto", f"Concepto {idx+1}")
                 tipo_pago   = ab.get("tipo", "manual")
                 fase        = ab.get("fase", None)
                 monto_total = float(ab.get("monto_total", 0) or 0)
-                abono_val   = float(ab.get("abono", 0) or 0)
 
+                # Siempre actualizar la deuda (cuánto debe en total)
                 if monto_total > 0:
                     db.add(models.Deuda(
                         tournament_id=tid, player_id=player.id,
@@ -664,12 +690,24 @@ def import_finances(
                         fase=fase, monto=monto_total, concepto=concepto,
                         config_tipo=f"xls_ab_{idx}",
                     ))
-                if abono_val > 0:
-                    db.add(models.Payment(
-                        tournament_id=tid, player_id=player.id,
-                        payment_type=tipo_pago if tipo_pago in ("inscripcion","arbitraje") else "manual",
-                        phase=fase, amount=abono_val, notes=f"{concepto} (Excel)",
-                    ))
+
+            # Registrar diferencia de inscripción si hay algo nuevo
+            if diferencia_insc > 0:
+                db.add(models.Payment(
+                    tournament_id=tid, player_id=player.id,
+                    payment_type="inscripcion",
+                    amount=diferencia_insc,
+                    notes=f"Abono inscripción (Excel)",
+                ))
+
+            # Registrar diferencia de arbitraje si hay algo nuevo
+            if diferencia_arb > 0:
+                db.add(models.Payment(
+                    tournament_id=tid, player_id=player.id,
+                    payment_type="arbitraje",
+                    amount=diferencia_arb,
+                    notes=f"Abono arbitraje (Excel)",
+                ))
 
         except Exception as e:
             errores.append(f"{j.get('nombre','?')}: {str(e)}")
