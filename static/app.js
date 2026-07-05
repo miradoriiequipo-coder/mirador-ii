@@ -804,8 +804,6 @@ function renderUpcomingSlider() {
 async function loadAttendanceSection(matchId) {
   const wrap = $(`attendance-section-${matchId}`);
   if (!wrap) return;
-  // Solo mostrar si es admin
-  if (!state.isAdmin) return;
   try {
     const data = await api(`/matches/${matchId}/attendance${tParam()}`);
     renderAttendanceSection(wrap, data, matchId);
