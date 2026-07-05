@@ -238,9 +238,16 @@ async function sendHomeChat() {
     const tq = state.viewingTournament ? `?t=${state.viewingTournament.id}` : '';
     const res = await api(`/ai/chat${tq}`, 'POST', { question: q });
     addMsg(res.answer, false);
+    if (res.finance_card) {
+      const card = document.createElement('div');
+      card.style.cssText = 'align-self:flex-start;max-width:95%;width:100%';
+      card.innerHTML = renderFinanceCard(res.finance_card);
+      msgs.appendChild(card);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
   } catch(e) {
     addMsg('Error: ' + e.message, false);
-  } finally { btn.disabled = false; btn.textContent = 'Enviar'; }
+  } finally { btn.disabled = false; btn.textContent = '→'; }
 }
 
 function homeQuickChat(q) {
@@ -2204,6 +2211,57 @@ function addChatMessage(role, text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+// ── Tarjeta visual de finanzas de jugador ────────────────────────
+function renderFinanceCard(fc) {
+  const pct_insc = fc.deuda_inscripcion > 0 ? Math.min(100, Math.round(fc.pago_inscripcion/fc.deuda_inscripcion*100)) : 100;
+  const pct_arb  = fc.deuda_arbitraje  > 0 ? Math.min(100, Math.round(fc.pago_arbitraje /fc.deuda_arbitraje *100)) : 100;
+  const alDia = fc.saldo_pendiente <= 0;
+
+  const barHtml = (label, pagado, deuda, pct, color) => {
+    const debe = Math.max(0, deuda - pagado);
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <span style="font-weight:600;color:rgba(255,255,255,0.8)">${label}</span>
+        <span style="color:${debe>0?'#ff9e9e':'#9effc0'}">${debe>0?'Debe '+fmt(debe):'✅ Al día'}</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;transition:width 0.4s"></div>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:2px">${fmt(pagado)} abonado de ${fmt(deuda)}</div>
+    </div>`;
+  };
+
+  const histHtml = fc.historial?.length ? `
+    <div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:12px;padding-top:10px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:rgba(255,255,255,0.45);margin-bottom:6px">Últimos movimientos</div>
+      ${fc.historial.map(h => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px">
+          <span style="color:rgba(255,255,255,0.6)">${h.fecha} · ${h.concepto}</span>
+          <span style="color:#9effc0;font-weight:700">+ ${fmt(h.monto)}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  return `<div style="background:var(--navy);border-radius:12px;padding:14px;border:1px solid rgba(193,241,0,0.2);margin-top:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;color:#fff">${fc.player_name}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4)">Camiseta #${fc.player_number}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;color:${alDia?'var(--lime)':'#ff9e9e'}">${fmt(fc.pago_total)}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.4)">total abonado</div>
+      </div>
+    </div>
+    ${fc.deuda_inscripcion > 0 ? barHtml('💰 Inscripción', fc.pago_inscripcion, fc.deuda_inscripcion, pct_insc, 'var(--lime)') : ''}
+    ${fc.deuda_arbitraje  > 0 ? barHtml('⚽ Arbitrajes',  fc.pago_arbitraje,  fc.deuda_arbitraje,  pct_arb,  '#60a5fa') : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.05);margin-top:8px">
+      <span style="font-size:12px;color:rgba(255,255,255,0.6)">Saldo pendiente</span>
+      <span style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;color:${alDia?'var(--lime)':'#ff9e9e'}">${alDia?'✅ Paz y salvo':fmt(fc.saldo_pendiente)}</span>
+    </div>
+    ${histHtml}
+  </div>`;
+}
+
 async function sendChat() {
   const input = $('chat-input');
   const question = input.value.trim();
@@ -2215,6 +2273,14 @@ async function sendChat() {
   try {
     const res = await api(`/ai/chat${tParam()}`, 'POST', { question });
     addChatMessage('bot', res.answer);
+    if (res.finance_card) {
+      const msgs = $('chat-messages');
+      const card = document.createElement('div');
+      card.style.cssText = 'align-self:flex-start;max-width:95%;width:100%';
+      card.innerHTML = renderFinanceCard(res.finance_card);
+      msgs.appendChild(card);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
   } catch(e) {
     addChatMessage('bot', '❌ Error: ' + e.message);
   } finally {

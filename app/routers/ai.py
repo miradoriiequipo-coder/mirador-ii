@@ -303,20 +303,102 @@ def chat(body: dict, t: Optional[int] = Query(None), db: Session = Depends(get_d
 
     context = _get_tournament_context(t, db)
 
+    # ── Detectar jugador específico y mostrar tarjeta ──
+    finance_card = None
+    palabras_finanzas = ["deuda","abono","pago","debe","dinero","cuenta","pagado","pendiente","saldo","finanza","inscripción","inscripcion","arbitraje","finanzas"]
+
+    # Buscar siempre si hay un jugador mencionado con alta confianza
+    try:
+        active = db.query(models.Tournament).filter(
+            models.Tournament.id == t if t else models.Tournament.is_active == True
+        ).first()
+        if active:
+            tid = active.id
+            players = db.query(models.Player).filter(
+                models.Player.tournament_id == tid
+            ).all()
+
+            import unicodedata
+            def norm(s):
+                return ''.join(c for c in unicodedata.normalize('NFD', s.lower()) if unicodedata.category(c) != 'Mn')
+
+            q_norm = norm(question)
+            palabras_q = [w for w in q_norm.split() if len(w) >= 3 and w.isalpha()]
+
+            jugador = None
+            mejor_score = 0
+            for p in players:
+                nombre_norm = norm(p.full_name)
+                partes_nombre = nombre_norm.split()
+                score = sum(1 for parte in partes_nombre if parte in palabras_q)
+                if score > mejor_score:
+                    mejor_score = score
+                    jugador = p
+
+            # Mostrar tarjeta si:
+            # - Score alto (≥2 partes del nombre coinciden), O
+            # - Score=1 Y la pregunta tiene palabras de finanzas
+            es_finanzas = any(p in question.lower() for p in palabras_finanzas)
+            if jugador and (mejor_score >= 2 or (mejor_score >= 1 and es_finanzas)):
+                deudas = db.query(models.Deuda).filter(
+                    models.Deuda.player_id == jugador.id,
+                    models.Deuda.tournament_id == tid
+                ).all()
+                pagos = db.query(models.Payment).filter(
+                    models.Payment.player_id == jugador.id,
+                    models.Payment.tournament_id == tid
+                ).all()
+
+                deuda_insc = sum(d.monto for d in deudas if d.tipo == "inscripcion")
+                deuda_arb  = sum(d.monto for d in deudas if d.tipo == "arbitraje")
+                pago_insc  = sum(p.amount for p in pagos if p.payment_type == "inscripcion")
+                pago_arb   = sum(p.amount for p in pagos if p.payment_type == "arbitraje")
+                pago_otros = sum(p.amount for p in pagos if p.payment_type in ("manual","ajuste"))
+                total_pago = pago_insc + pago_arb + pago_otros
+                total_deuda = deuda_insc + deuda_arb
+
+                historial = sorted([{
+                    "fecha": (p.payment_date or p.created_at).strftime("%d/%m/%Y") if (p.payment_date or p.created_at) else "—",
+                    "concepto": p.notes or p.payment_type,
+                    "monto": p.amount
+                } for p in pagos if p.amount > 0], key=lambda x: x["fecha"], reverse=True)[:8]
+
+                finance_card = {
+                    "player_name": jugador.full_name,
+                    "player_number": jugador.player_number,
+                    "deuda_inscripcion": deuda_insc,
+                    "deuda_arbitraje": deuda_arb,
+                    "deuda_total": total_deuda,
+                    "pago_inscripcion": pago_insc,
+                    "pago_arbitraje": pago_arb,
+                    "pago_total": total_pago,
+                    "saldo_pendiente": total_deuda - total_pago,
+                    "historial": historial,
+                }
+    except Exception:
+        finance_card = None
+
+    instruccion_ia = ""
+    if finance_card:
+        instruccion_ia = """IMPORTANTE: Los datos financieros del jugador se mostrarán en una TARJETA VISUAL separada.
+Tu respuesta debe ser MUY CORTA: solo una o dos frases amigables presentando al jugador.
+NO repitas los números ni las deudas porque ya aparecen en la tarjeta."""
+
     prompt = f"""Eres el asistente oficial del equipo de fútbol Mirador II FC de Colombia.
-Responde en español colombiano, de forma amigable, breve y directa.
+Responde en español colombiano, de forma amigable y directa.
 Solo responde sobre el equipo, torneo, jugadores, partidos y finanzas.
-Si preguntan algo que no está en los datos, dilo amablemente.
+{instruccion_ia}
 
 DATOS ACTUALES DEL TORNEO:
 {json.dumps(context, ensure_ascii=False, indent=2)}
 
 PREGUNTA: {question}
 
-Responde de forma conversacional y amigable. Máximo 3 párrafos cortos."""
+{"Responde en máximo 1 frase corta y amigable. Los datos se muestran en la tarjeta." if finance_card else "Responde de forma conversacional. Máximo 2 párrafos cortos."}"""
 
     try:
-        return {"answer": _generate(prompt)}
+        answer = _generate(prompt)
+        return {"answer": answer, "finance_card": finance_card}
     except Exception as e:
         msg = str(e)
         if "rate_limit_exceeded" in msg or "429" in msg:
