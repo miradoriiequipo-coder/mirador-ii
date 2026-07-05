@@ -816,20 +816,20 @@ function renderAttendanceSection(wrap, data, matchId) {
   const confirmed = data.players.filter(p => p.status === 'confirmed');
 
   const chips = confirmed.map(p =>
-    `<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(193,241,0,0.15);border:1px solid rgba(193,241,0,0.4);border-radius:20px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--lime)">
+    `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--navy);border:1px solid var(--navy);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:#fff">
       <span style="font-family:'JetBrains Mono',monospace;font-size:10px;opacity:0.7">${p.player_number}</span> ${p.full_name.split(' ')[0]}
     </span>`
   ).join('');
 
   wrap.innerHTML = `
-    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;margin-top:4px">
+    <div style="border-top:1px solid var(--border-light);padding-top:12px;margin-top:4px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.8)">👥 Asistencia</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--lime);font-weight:700">${confirmed.length}/${data.total}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--navy)">👥 Asistencia</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--navy);font-weight:700">${confirmed.length}/${data.total}</span>
         </div>
         <button onclick="openAttendanceModal(${matchId})"
-          style="font-size:11px;padding:5px 12px;background:rgba(193,241,0,0.15);color:var(--lime);border:1px solid rgba(193,241,0,0.4);border-radius:20px;cursor:pointer;font-weight:600">
+          style="font-size:11px;padding:5px 12px;background:var(--navy);color:#fff;border:1px solid var(--navy);border-radius:20px;cursor:pointer;font-weight:600">
           ✏️ Registrar
         </button>
       </div>
@@ -937,21 +937,21 @@ function renderAttendanceSection(wrap, data, matchId) {
 
   // Chips de nombres confirmados (texto blanco sobre fondo oscuro)
   const chips = confirmed.map(p =>
-    `<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(193,241,0,0.15);border:1px solid rgba(193,241,0,0.4);border-radius:20px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--lime)">
+    `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--navy);border:1px solid var(--navy);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:#fff">
       <span style="font-family:'JetBrains Mono',monospace;font-size:10px;opacity:0.7">${p.player_number}</span> ${p.full_name.split(' ')[0]}
     </span>`
   ).join('');
 
   wrap.innerHTML = `
-    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;margin-top:4px">
+    <div style="border-top:1px solid var(--border-light);padding-top:12px;margin-top:4px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.8)">👥 Asistencia</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--lime);font-weight:700">${confirmed.length}/${total}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--navy)">👥 Asistencia</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--navy);font-weight:700">${confirmed.length}/${total}</span>
           ${data.declined>0?`<span style="font-size:10px;color:rgba(255,100,100,0.8)">· ${data.declined} no van</span>`:''}
         </div>
         ${state.isAdmin ? `<button onclick="openAttendanceModal(${matchId})"
-          style="font-size:11px;padding:5px 12px;background:rgba(193,241,0,0.15);color:var(--lime);border:1px solid rgba(193,241,0,0.4);border-radius:20px;cursor:pointer;font-weight:600">
+          style="font-size:11px;padding:5px 12px;background:var(--navy);color:#fff;border:1px solid var(--navy);border-radius:20px;cursor:pointer;font-weight:600">
           ✏️ Registrar
         </button>` : ''}
       </div>
