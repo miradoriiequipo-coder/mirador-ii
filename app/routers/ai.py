@@ -560,15 +560,15 @@ async def read_file(
                 debe_insc  = num(row, 8)
                 total_insc = abono_insc + debe_insc
 
-                # Partidos de arbitraje (columnas 9-14)
+                # Partidos de arbitraje (columnas 9-14) — monto por partido
                 partidos = []
                 for p_idx in range(9, 15):
                     monto_partido = num(row, p_idx)
                     if monto_partido > 0:
-                        partidos.append(monto_partido)
+                        partidos.append(int(round(monto_partido)))
 
-                abono_arb = num(row, 15)
-                debe_arb  = num(row, 16)
+                abono_arb = int(round(num(row, 15)))
+                debe_arb  = int(round(num(row, 16)))
                 total_arb = abono_arb + debe_arb
                 total_abonado = abono_insc + abono_arb
 
@@ -577,22 +577,31 @@ async def read_file(
 
                 # Construir lista de abonos
                 abonos = []
-                if total_insc > 0 or abono_insc >= 0:
+                if total_insc > 0 or debe_insc > 0:
                     abonos.append({
                         "concepto": "Inscripción",
                         "tipo": "inscripcion",
                         "fase": None,
-                        "monto_total": round(total_insc),
-                        "abono": round(abono_insc),
+                        "monto_total": int(round(total_insc)),
+                        "abono": int(round(abono_insc)),
                     })
+                # Un abono por partido (deuda individual) + abono total sin dividir
                 for p_num, monto in enumerate(partidos, 1):
-                    abono_por_partido = round(abono_arb / len(partidos)) if partidos else 0
                     abonos.append({
                         "concepto": f"Arbitraje Partido {p_num}",
                         "tipo": "arbitraje",
                         "fase": f"Partido {p_num}",
-                        "monto_total": round(monto),
-                        "abono": abono_por_partido,
+                        "monto_total": monto,
+                        "abono": 0,  # El abono total se registra aparte
+                    })
+                # Registrar el abono de arbitraje como un solo pago total (evita errores de redondeo)
+                if abono_arb > 0:
+                    abonos.append({
+                        "concepto": "Abono Arbitrajes",
+                        "tipo": "arbitraje",
+                        "fase": None,
+                        "monto_total": 0,  # Solo es pago, no deuda adicional
+                        "abono": abono_arb,
                     })
 
                 jugadores.append({
