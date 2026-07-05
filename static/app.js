@@ -2508,6 +2508,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.page));
   });
 
+  // Limpiar campos de chat que el navegador puede autollenar
+  setTimeout(() => {
+    const chatInput = $('home-chat-input');
+    if (chatInput) chatInput.value = '';
+    const aiInput = $('chat-input');
+    if (aiInput) aiInput.value = '';
+  }, 100);
+
   document.querySelectorAll('[data-page]').forEach(link=>{
     link.addEventListener('click',e=>{e.preventDefault();navigateTo(link.dataset.page);});
   });
