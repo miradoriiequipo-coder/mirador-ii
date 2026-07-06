@@ -1416,7 +1416,6 @@ function renderFinancesTableExcel(finances, configs) {
   const arbs = configs.arbitrajes || [];
   const canEdit = state.isAdmin && !isViewingPast();
 
-  // Cabecera con botones de acción
   let html = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div style="font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:0.04em">📊 Cuentas del torneo</div>
@@ -1426,25 +1425,23 @@ function renderFinancesTableExcel(finances, configs) {
       </div>
     </div>
     <div style="overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border-light)">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
           <tr style="background:var(--navy);color:#fff">
-            <th style="padding:8px 6px;text-align:center;font-size:10px;white-space:nowrap">#</th>
-            <th style="padding:8px 10px;text-align:left;font-size:10px">Nombre</th>
-            <th style="padding:8px 6px;text-align:center;font-size:10px;background:rgba(193,241,0,0.15)" colspan="2">Inscripción</th>
-            ${arbs.map((a,i) => `<th style="padding:8px 6px;text-align:center;font-size:10px;white-space:nowrap">P${i+1}</th>`).join('')}
-            <th style="padding:8px 6px;text-align:center;font-size:10px;background:rgba(193,241,0,0.1)" colspan="2">Arbitraje</th>
-            <th style="padding:8px 6px;text-align:center;font-size:10px;background:rgba(193,241,0,0.2)">Total</th>
-            ${canEdit ? `<th style="padding:8px 6px;text-align:center;font-size:10px"></th>` : ''}
+            <th style="padding:10px 8px;text-align:center;font-size:10px;width:36px">#</th>
+            <th style="padding:10px 12px;text-align:left;font-size:10px">Nombre</th>
+            <th style="padding:10px 8px;text-align:center;font-size:10px;background:rgba(193,241,0,0.15)" colspan="2">💰 Inscripción</th>
+            <th style="padding:10px 8px;text-align:center;font-size:10px;background:rgba(255,255,255,0.08)" colspan="2">⚽ Arbitraje</th>
+            <th style="padding:10px 8px;text-align:center;font-size:10px;background:rgba(193,241,0,0.2)">Total</th>
+            ${canEdit ? `<th style="padding:10px 6px;width:70px"></th>` : ''}
           </tr>
-          <tr style="background:rgba(13,33,55,0.85);color:rgba(255,255,255,0.7)">
+          <tr style="background:rgba(13,33,55,0.85);color:rgba(255,255,255,0.6)">
             <th></th><th></th>
-            <th style="padding:5px 6px;text-align:center;font-size:9px">Abono</th>
-            <th style="padding:5px 6px;text-align:center;font-size:9px">Debe</th>
-            ${arbs.map(a => `<th style="padding:5px 6px;text-align:center;font-size:9px">${fmt(a.amount_per_player)}</th>`).join('')}
-            <th style="padding:5px 6px;text-align:center;font-size:9px">Abono</th>
-            <th style="padding:5px 6px;text-align:center;font-size:9px">Debe</th>
-            <th style="padding:5px 6px;text-align:center;font-size:9px">Abonado</th>
+            <th style="padding:5px 8px;text-align:right;font-size:10px">Abono</th>
+            <th style="padding:5px 8px;text-align:right;font-size:10px">Debe</th>
+            <th style="padding:5px 8px;text-align:right;font-size:10px">Abono</th>
+            <th style="padding:5px 8px;text-align:right;font-size:10px">Debe</th>
+            <th style="padding:5px 8px;text-align:right;font-size:10px">Abonado</th>
             ${canEdit ? `<th></th>` : ''}
           </tr>
         </thead>
@@ -1458,28 +1455,26 @@ function renderFinancesTableExcel(finances, configs) {
     const abonoArb  = p.pago_arbitraje ?? 0;
     const debeArb   = Math.max(0, (p.deuda_arbitraje ?? 0) - abonoArb);
     const total     = abonoInsc + abonoArb;
-    const alDia     = p.saldo_pendiente <= 0;
     const bg        = i%2===0 ? '' : 'background:var(--surface-low)';
 
     sumAbonoInsc+=abonoInsc; sumDebeInsc+=debeInsc;
     sumAbonoArb+=abonoArb; sumDebeArb+=debeArb; sumTotal+=total;
 
     html += `<tr style="border-bottom:1px solid var(--border-light);${bg}${p.status==='inactivo'?';opacity:0.5':''}">
-      <td style="padding:8px 6px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint)">${p.player_number}</td>
-      <td style="padding:8px 10px;font-weight:600;color:var(--navy)">${p.player_name}</td>
-      <td style="padding:8px 6px;text-align:right;color:var(--green);font-family:'JetBrains Mono',monospace">${fmt(abonoInsc)}</td>
-      <td style="padding:8px 6px;text-align:right;color:${debeInsc>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace">${debeInsc>0?fmt(debeInsc):'✓'}</td>
-      ${arbs.map(a => `<td style="padding:8px 6px;text-align:center;font-size:11px;color:var(--text-faint)">✓</td>`).join('')}
-      <td style="padding:8px 6px;text-align:right;color:var(--green);font-family:'JetBrains Mono',monospace">${fmt(abonoArb)}</td>
-      <td style="padding:8px 6px;text-align:right;color:${debeArb>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace">${debeArb>0?fmt(debeArb):'✓'}</td>
-      <td style="padding:8px 6px;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--navy)">${fmt(total)}</td>
-      ${canEdit ? `<td style="padding:8px 6px;text-align:center">
-        <button onclick="openQuickPayModal(${p.player_id})" style="font-size:10px;padding:3px 8px;background:var(--lime);color:var(--navy);border:none;border-radius:4px;cursor:pointer;font-weight:700">+</button>
-        <button onclick="togglePlayerHistory(${p.player_id})" style="font-size:10px;padding:3px 8px;background:var(--surface-low);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:2px">≡</button>
+      <td style="padding:10px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-faint)">${p.player_number}</td>
+      <td style="padding:10px 12px;font-weight:600;color:var(--navy)">${p.player_name}</td>
+      <td style="padding:10px 8px;text-align:right;color:${abonoInsc>0?'var(--green)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${abonoInsc>0?fmt(abonoInsc):'—'}</td>
+      <td style="padding:10px 8px;text-align:right;color:${debeInsc>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${debeInsc>0?fmt(debeInsc):'✓'}</td>
+      <td style="padding:10px 8px;text-align:right;color:${abonoArb>0?'var(--green)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${abonoArb>0?fmt(abonoArb):'—'}</td>
+      <td style="padding:10px 8px;text-align:right;color:${debeArb>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${debeArb>0?fmt(debeArb):'✓'}</td>
+      <td style="padding:10px 8px;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--navy)">${total>0?fmt(total):'—'}</td>
+      ${canEdit ? `<td style="padding:10px 6px;text-align:center">
+        <button onclick="openQuickPayModal(${p.player_id})" style="font-size:11px;padding:3px 8px;background:var(--lime);color:var(--navy);border:none;border-radius:4px;cursor:pointer;font-weight:700" title="Registrar pago">+</button>
+        <button onclick="togglePlayerHistory(${p.player_id})" style="font-size:11px;padding:3px 8px;background:var(--surface-low);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:2px" title="Ver historial">≡</button>
       </td>` : ''}
     </tr>
     <tr class="payment-detail-row" id="detail-${p.player_id}" style="display:none">
-      <td colspan="${6 + arbs.length + (canEdit?3:2)}">
+      <td colspan="${canEdit?8:7}">
         <div class="payment-detail-inner" id="history-content-${p.player_id}">
           <div style="text-align:center;padding:20px;color:var(--text-faint)">Cargando historial...</div>
         </div>
@@ -1487,17 +1482,15 @@ function renderFinancesTableExcel(finances, configs) {
     </tr>`;
   });
 
-  // Fila de totales
   html += `</tbody>
     <tfoot>
       <tr style="background:var(--navy);color:#fff;font-weight:700">
-        <td colspan="2" style="padding:8px 10px;font-family:'Oswald',sans-serif;letter-spacing:0.05em">TOTALES</td>
-        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace">${fmt(sumAbonoInsc)}</td>
-        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeInsc>0?'#ff9999':'#99ff99'}">${fmt(sumDebeInsc)}</td>
-        ${arbs.map(() => `<td></td>`).join('')}
-        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace">${fmt(sumAbonoArb)}</td>
-        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeArb>0?'#ff9999':'#99ff99'}">${fmt(sumDebeArb)}</td>
-        <td style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumTotal)}</td>
+        <td colspan="2" style="padding:10px 12px;font-family:'Oswald',sans-serif;letter-spacing:0.05em;font-size:13px">TOTALES</td>
+        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumAbonoInsc)}</td>
+        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeInsc>0?'#ff9999':'#99ff99'}">${fmt(sumDebeInsc)}</td>
+        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumAbonoArb)}</td>
+        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeArb>0?'#ff9999':'#99ff99'}">${fmt(sumDebeArb)}</td>
+        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime);font-size:15px">${fmt(sumTotal)}</td>
         ${canEdit ? `<td></td>` : ''}
       </tr>
     </tfoot>
@@ -1507,51 +1500,133 @@ function renderFinancesTableExcel(finances, configs) {
 }
 
 function renderPaymentsSummaryCards(finances) {
-  const wrap=$('payments-summary');
-  const totalDeuda=finances.reduce((s,p)=>s+p.deuda_total,0);
-  const totalPagado=finances.reduce((s,p)=>s+p.pagado_total,0);
-  const totalPend=finances.reduce((s,p)=>s+p.saldo_pendiente,0);
-  const alDia=finances.filter(p=>p.saldo_pendiente<=0&&p.deuda_total>0).length;
-  wrap.innerHTML=`
-    <div class="card" style="text-align:center"><div style="font-size:11px;color:var(--text-faint);font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Recaudado</div><div style="font-family:'Oswald',sans-serif;font-size:28px;color:var(--green);margin-top:4px">${fmt(totalPagado)}</div></div>
-    <div class="card" style="text-align:center"><div style="font-size:11px;color:var(--text-faint);font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Deuda Total</div><div style="font-family:'Oswald',sans-serif;font-size:28px;color:var(--navy);margin-top:4px">${fmt(totalDeuda)}</div></div>
-    <div class="card" style="text-align:center"><div style="font-size:11px;color:var(--text-faint);font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Pendiente</div><div style="font-family:'Oswald',sans-serif;font-size:28px;color:var(--red);margin-top:4px">${fmt(totalPend)}</div></div>
-    <div class="card" style="text-align:center"><div style="font-size:11px;color:var(--text-faint);font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Al día</div><div style="font-family:'Oswald',sans-serif;font-size:28px;color:var(--navy);margin-top:4px">${alDia}/${finances.length}</div></div>`;
+  const wrap = $('payments-summary');
+  if (!wrap) return;
+
+  // Totales generales
+  const totalDeuda    = finances.reduce((s,p) => s + (p.deuda_total || 0), 0);
+  const totalPagado   = finances.reduce((s,p) => s + (p.pagado_total || 0), 0);
+  const totalPend     = finances.reduce((s,p) => s + Math.max(0, p.saldo_pendiente || 0), 0);
+  const alDia         = finances.filter(p => (p.saldo_pendiente||0) <= 0 && (p.deuda_total||0) > 0).length;
+
+  // Por categoría
+  const inscDeuda     = finances.reduce((s,p) => s + (p.deuda_inscripcion || 0), 0);
+  const inscPagado    = finances.reduce((s,p) => s + (p.pago_inscripcion  || 0), 0);
+  const inscPend      = Math.max(0, inscDeuda - inscPagado);
+  const inscPct       = inscDeuda > 0 ? Math.round(inscPagado / inscDeuda * 100) : 0;
+
+  const arbDeuda      = finances.reduce((s,p) => s + (p.deuda_arbitraje || 0), 0);
+  const arbPagado     = finances.reduce((s,p) => s + (p.pago_arbitraje   || 0), 0);
+  const arbPend       = Math.max(0, arbDeuda - arbPagado);
+  const arbPct        = arbDeuda > 0 ? Math.round(arbPagado / arbDeuda * 100) : 0;
+
+  const tarjeta = (titulo, icono, pagado, deuda, pendiente, pct, color) => `
+    <div style="background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:16px 18px;flex:1;min-width:240px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:16px">${icono}</span>
+          <span style="font-family:'Oswald',sans-serif;font-size:13px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:0.06em">${titulo}</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${pct===100?'var(--green)':pct>50?'var(--navy)':'var(--red)'}">${pct}%</span>
+      </div>
+      <div style="background:var(--border-light);border-radius:4px;height:6px;overflow:hidden;margin-bottom:14px">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;transition:width 0.5s"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+        <div>
+          <div style="font-size:10px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">Recaudado</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;color:var(--green)">${fmt(pagado)}</div>
+        </div>
+        <div style="border-left:1px solid var(--border-light);border-right:1px solid var(--border-light)">
+          <div style="font-size:10px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">Pendiente</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;color:${pendiente>0?'var(--red)':'var(--green)'}">${pendiente>0?fmt(pendiente):'✅'}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">Total</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;color:var(--navy)">${fmt(deuda)}</div>
+        </div>
+      </div>
+    </div>`;
+
+  wrap.innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+      ${tarjeta('Inscripción', '💰', inscPagado, inscDeuda, inscPend, inscPct, 'var(--navy)')}
+      ${tarjeta('Arbitrajes',  '⚽', arbPagado,  arbDeuda,  arbPend,  arbPct,  '#1565c0')}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="background:var(--navy);border-radius:var(--radius-lg);padding:12px 18px;display:flex;align-items:center;gap:16px;flex:1;min-width:200px">
+        <div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total recaudado</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:24px;font-weight:700;color:var(--lime)">${fmt(totalPagado)}</div>
+        </div>
+        <div style="border-left:1px solid rgba(255,255,255,0.15);padding-left:16px">
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total pendiente</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:24px;font-weight:700;color:${totalPend>0?'#ff9e9e':'var(--lime)'}">${totalPend>0?fmt(totalPend):'✅ Todo al día'}</div>
+        </div>
+        <div style="border-left:1px solid rgba(255,255,255,0.15);padding-left:16px;margin-left:auto">
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Al día</div>
+          <div style="font-family:'Oswald',sans-serif;font-size:24px;font-weight:700;color:#fff">${alDia}<span style="font-size:14px;opacity:0.5">/${finances.length}</span></div>
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderConfigsSection(configs) {
   const wrap=$('configs-section'); if(!wrap)return;
   const canEdit=state.isAdmin&&!isViewingPast();
-  const inscCards=configs.inscripciones.map(c=>`
+
+  // Derivar totales de inscripción y arbitraje desde las finanzas si no hay configs
+  const finances = state.finances || [];
+  const totalInscDeuda = finances.reduce((s,p) => s+(p.deuda_inscripcion||0), 0);
+  const totalArbDeuda  = finances.reduce((s,p) => s+(p.deuda_arbitraje||0), 0);
+  const nJugadores = finances.filter(p => p.is_active).length || finances.length;
+
+  const inscCards = configs.inscripciones.length ? configs.inscripciones.map(c=>`
     <div class="card" style="padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
       <div>
         <div style="font-weight:700;color:var(--navy)">Inscripción — ${fmt(c.total_amount)} total</div>
-        <div style="font-size:13px;color:var(--text-muted)">${c.num_players} jugadores activos · <strong style="color:var(--green)">${fmt(c.amount_per_player)} c/u</strong></div>
-        ${c.total_matches?`<div style="font-size:12px;color:var(--text-faint)">${c.total_matches} partidos totales del torneo</div>`:''}
+        <div style="font-size:13px;color:var(--text-muted)">${c.num_players} jugadores · <strong style="color:var(--green)">${fmt(c.amount_per_player)} c/u</strong></div>
         ${c.notes?`<div style="font-size:12px;color:var(--text-faint)">${c.notes}</div>`:''}
       </div>
-      ${canEdit?`<button class="btn btn-danger" style="font-size:12px;white-space:nowrap" onclick="deleteInscripcionConfig(${c.id})">🗑️</button>`:''}
-    </div>`).join('')||'<div style="color:var(--text-faint);font-size:13px">Sin configuración</div>';
-  const arbCards=configs.arbitrajes.map(a=>`
+      ${canEdit?`<button class="btn btn-danger" style="font-size:12px" onclick="deleteInscripcionConfig(${c.id})">🗑️</button>`:''}
+    </div>`).join('')
+  : totalInscDeuda > 0 ? `
+    <div style="background:rgba(193,241,0,0.06);border:1px solid rgba(193,241,0,0.2);border-radius:10px;padding:12px 14px">
+      <div style="font-weight:700;color:var(--navy);margin-bottom:6px">Desde Excel — ${nJugadores} jugadores</div>
+      <div style="font-size:13px;color:var(--text-faint)">Total recaudable: <strong style="color:var(--navy)">${fmt(Math.round(totalInscDeuda/1000)*1000)}</strong></div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px;border-top:1px solid rgba(0,0,0,0.06);padding-top:4px">
+        💡 Precio completo: <strong>$950.000</strong> (nuevos) · Premio antiguos: <strong>$300.000</strong>
+      </div>
+    </div>`
+  : `<div style="color:var(--text-faint);font-size:13px">Sin configuración</div>`;
+
+  const arbCards = configs.arbitrajes.length ? configs.arbitrajes.map(a=>`
     <div class="card" style="padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
       <div>
         <div style="font-weight:700;color:var(--navy)">${a.fase}</div>
         <div style="font-size:13px;color:var(--text-muted)">${a.num_games} partidos × ${fmt(a.price_per_game)} = ${fmt(a.total_phase)}</div>
-        <div style="font-size:13px;color:var(--text-muted)">${a.num_players} jugadores activos · <strong style="color:#3b6d11">${fmt(a.amount_per_player)} c/u</strong></div>
+        <div style="font-size:13px;color:var(--text-muted)">${a.num_players} jugadores · <strong style="color:#3b6d11">${fmt(a.amount_per_player)} c/u</strong></div>
       </div>
-      ${canEdit?`<button class="btn btn-danger" style="font-size:12px;white-space:nowrap" onclick="deleteArbitrajePhase(${a.id})">🗑️</button>`:''}
-    </div>`).join('')||'<div style="color:var(--text-faint);font-size:13px">Sin fases configuradas</div>';
+      ${canEdit?`<button class="btn btn-danger" style="font-size:12px" onclick="deleteArbitrajePhase(${a.id})">🗑️</button>`:''}
+    </div>`).join('')
+  : totalArbDeuda > 0 ? `
+    <div style="background:rgba(21,101,192,0.06);border:1px solid rgba(21,101,192,0.2);border-radius:10px;padding:12px 14px">
+      <div style="font-weight:700;color:var(--navy);margin-bottom:4px">Desde Excel — ${nJugadores} jugadores</div>
+      <div style="font-size:13px;color:var(--text-faint)">Total arbitrajes: <strong style="color:var(--navy)">${fmt(Math.round(totalArbDeuda/1000)*1000)}</strong></div>
+    </div>`
+  : `<div style="color:var(--text-faint);font-size:13px">Sin fases configuradas</div>`;
+
   wrap.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
       <div>
         <div style="font-family:'Oswald',sans-serif;font-size:18px;color:var(--green);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">💰 Inscripción
-          ${canEdit?`<button class="btn btn-primary" style="font-size:11px;margin-left:8px;padding:4px 10px" onclick="showModal('modal-inscripcion')">+ Configurar</button>`:''}
+          ${canEdit?`<button class="btn btn-primary" style="font-size:11px;margin-left:8px;padding:4px 10px" onclick="openInscripcionModal()">+ Config</button>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">${inscCards}</div>
       </div>
       <div>
         <div style="font-family:'Oswald',sans-serif;font-size:18px;color:var(--navy);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">🏟️ Arbitrajes
-          ${canEdit?`<button class="btn btn-primary" style="font-size:11px;margin-left:8px;padding:4px 10px" onclick="showModal('modal-arbitraje')">+ Fase</button>`:''}
+          ${canEdit?`<button class="btn btn-primary" style="font-size:11px;margin-left:8px;padding:4px 10px" onclick="openArbitrajeModal()">+ Fase</button>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">${arbCards}</div>
       </div>
@@ -2072,6 +2147,30 @@ async function savePayment(){
   catch(e){showError('payment-error',e.message);}
 }
 
+function openInscripcionModal() {
+  const finances = state.finances || [];
+  const totalInscDeuda = finances.reduce((s,p) => s+(p.deuda_inscripcion||0), 0);
+  const inputTotal   = $('insc-total');
+  const inputMatches = $('insc-matches');
+  const inputNotes   = $('insc-notes');
+  if (inputTotal)   inputTotal.value   = totalInscDeuda > 0 ? Math.round(totalInscDeuda/1000)*1000 : '';
+  if (inputNotes)   inputNotes.value   = '';
+  // Total partidos: desde configs de arbitraje o desde los abonos del Excel (6 partidos por defecto Fase 1)
+  if (inputMatches) {
+    const arbs = state.configs?.arbitrajes || [];
+    const totalPartidos = arbs.reduce((s,a) => s+(a.num_games||0), 0);
+    // Si no hay configs, derivar del Excel: cuántos partidos tiene la deuda de arbitraje
+    // Cada jugador tiene 6 partidos en el Excel (Fase 1)
+    const finances2 = state.finances || [];
+    const nConArb = finances2.filter(p => (p.deuda_arbitraje||0) > 0).length;
+    const totalArbDeuda = finances2.reduce((s,p) => s+(p.deuda_arbitraje||0), 0);
+    const partidos = totalPartidos > 0 ? totalPartidos
+      : (nConArb > 0 ? Math.round(totalArbDeuda / nConArb / 10000) : 6);
+    inputMatches.value = partidos;
+  }
+  showModal('modal-inscripcion');
+}
+
 async function saveInscripcionConfig(){
   const body={total_amount:+$('insc-total').value,total_matches:+($('insc-matches')?.value||0)||null,notes:$('insc-notes').value.trim()};
   if(!body.total_amount){showError('insc-error','El monto es obligatorio.');return;}
@@ -2079,6 +2178,24 @@ async function saveInscripcionConfig(){
     const res=await api(`/finances/inscripcion-config${tParam()}`,'POST',body);
     toast(res.message); closeModal('modal-inscripcion'); loadPayments();
   }catch(e){showError('insc-error',e.message);}
+}
+
+function openArbitrajeModal() {
+  const finances = state.finances || [];
+  const totalArbDeuda = finances.reduce((s,p) => s+(p.deuda_arbitraje||0), 0);
+  // Solo contar jugadores que tienen deuda de arbitraje
+  const nConArb = finances.filter(p => (p.deuda_arbitraje||0) > 0).length;
+  // Precio por partido exacto (sin redondear a miles)
+  const precioPorPartido = nConArb > 0 && totalArbDeuda > 0
+    ? Math.round(totalArbDeuda / nConArb / 6)
+    : 0;
+  const inputFase  = $('arb-fase');
+  const inputGames = $('arb-games');
+  const inputPrice = $('arb-price');
+  if (inputFase)  inputFase.value  = 'Fase 1';
+  if (inputGames) inputGames.value = 6;
+  if (inputPrice && precioPorPartido > 0) inputPrice.value = precioPorPartido;
+  showModal('modal-arbitraje');
 }
 
 async function saveArbitrajePhase(){
