@@ -566,9 +566,10 @@ async def read_file(
                     monto = to_int(row[p_idx] if len(row) > p_idx else None)
                     partidos.append(monto)  # incluir aunque sea 0
 
-                # Arbitraje: abono y debe totales exactos
+                # Arbitraje: usar el total exacto del Excel (abono + debe de cols 15+16)
                 abono_arb = to_int(row[15] if len(row) > 15 else None)
                 debe_arb  = to_int(row[16] if len(row) > 16 else None)
+                total_arb = abono_arb + debe_arb  # Total exacto del Excel
 
                 # Total abonado directo del Excel (col 17)
                 total_abonado = to_int(row[17] if len(row) > 17 else None)
@@ -578,7 +579,7 @@ async def read_file(
                 # Construir abonos
                 abonos = []
 
-                # Inscripción
+                # Inscripción: total exacto del Excel
                 if total_insc > 0 or abono_insc > 0:
                     abonos.append({
                         "concepto": "Inscripción",
@@ -588,18 +589,17 @@ async def read_file(
                         "abono": abono_insc,
                     })
 
-                # Cada partido de arbitraje (solo los que tienen monto > 0)
-                for p_num, monto in enumerate(partidos, 1):
-                    if monto > 0:
-                        abonos.append({
-                            "concepto": f"Arbitraje Partido {p_num}",
-                            "tipo": "arbitraje",
-                            "fase": f"Partido {p_num}",
-                            "monto_total": monto,
-                            "abono": 0,
-                        })
+                # Arbitraje: UNA sola deuda con el total exacto (evita errores de redondeo por partido)
+                if total_arb > 0:
+                    abonos.append({
+                        "concepto": "Arbitraje Fase 1 (6 partidos)",
+                        "tipo": "arbitraje",
+                        "fase": "Fase 1",
+                        "monto_total": total_arb,
+                        "abono": 0,
+                    })
 
-                # Abono total de arbitraje como pago único (exacto, sin dividir)
+                # Abono de arbitraje como pago único exacto
                 if abono_arb > 0:
                     abonos.append({
                         "concepto": "Abono Arbitrajes",
