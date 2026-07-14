@@ -495,112 +495,117 @@ async def read_file(
             ws = wb.active
             rows = list(ws.iter_rows(values_only=True))
 
-            # ── Leer config del torneo ──
-            def cel(row, idx):
-                v = row[idx] if len(row) > idx else None
-                if isinstance(v, float): return int(round(v))
-                return v
-
-            def num(row, idx):
-                v = cel(row, idx)
-                try: return float(v) if v else 0.0
-                except: return 0.0
-
-            # Obtener jugadores ya en la app para marcar nuevos
+            # Obtener jugadores ya en la app
             if t:
                 tid_check = t
             else:
-                active = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
-                tid_check = active.id if active else None
+                active_t = db.query(models.Tournament).filter(models.Tournament.is_active == True).first()
+                tid_check = active_t.id if active_t else None
 
             existentes_cedulas = set()
             existentes_numeros = set()
             if tid_check:
-                players_existentes = db.query(models.Player).filter(
+                players_ex = db.query(models.Player).filter(
                     models.Player.tournament_id == tid_check
                 ).all()
-                existentes_cedulas = {p.id_number for p in players_existentes if p.id_number}
-                existentes_numeros = {p.player_number for p in players_existentes if p.player_number}
+                existentes_cedulas = {p.id_number for p in players_ex if p.id_number}
+                existentes_numeros = {p.player_number for p in players_ex if p.player_number}
 
-            # ── Columnas (0-indexed):
-            # 0=#, 1=Nombre, 2=vacío, 3=Documento, 4=Salud, 5=Teléfono, 6=Dorsal
-            # 7=Abono Insc, 8=Debe Insc
-            # 9=P1, 10=P2, 11=P3, 12=P4, 13=P5, 14=P6
-            # 15=Abono Arb, 16=Debe Arb, 17=Total
+            def to_int(v):
+                """Convierte a entero redondeado, 0 si no es número."""
+                if v is None: return 0
+                try: return int(round(float(v)))
+                except: return 0
+
+            def to_str(v):
+                if v is None: return ''
+                return str(v).strip()
 
             jugadores = []
-            tipo_actual = "antiguo"  # cambia a "nuevo" cuando encuentra fila "Nuevos"
+            tipo_actual = "antiguo"
+            en_retirados = False
 
+            # El Excel tiene datos de jugadores desde la fila 12 (index 11)
+            # Las filas 1-10 son configuración y cabeceras
             for i, row in enumerate(rows):
-                if i < 7: continue  # saltar cabeceras (filas 1-7)
-                if not row or not any(v for v in row): continue
+                if i < 10: continue  # saltar filas 1-10 (config + headers)
+                if not row or not any(v is not None for v in row): continue
 
-                # Detectar sección Nuevos/Antiguos
-                primer_cel = str(row[0] or '').strip().lower()
-                if 'antiguo' in primer_cel:
+                col0 = row[0]
+                col0_str = to_str(col0).lower()
+
+                # Detectar secciones
+                if 'ya no' in col0_str or 'retirado' in col0_str or 'expulsado' in col0_str:
+                    en_retirados = True
+                    continue
+                if col0_str == 'antiguos' or col0_str == 'antiguo':
                     tipo_actual = 'antiguo'; continue
-                if 'nuevo' in primer_cel:
+                if col0_str == 'nuevos' or col0_str == 'nuevo':
                     tipo_actual = 'nuevo'; continue
 
-                # Fila de jugador: col 1 tiene nombre
-                nombre_raw = row[1] if len(row) > 1 else None
-                if not nombre_raw or not isinstance(nombre_raw, str) or not nombre_raw.strip():
+                # Solo procesar filas con número de secuencia en col 0
+                if not isinstance(col0, (int, float)) or col0 is None:
                     continue
 
-                nombre  = nombre_raw.strip()
-                cedula  = str(cel(row, 3) or '').strip()
-                salud   = str(cel(row, 4) or '').strip()
-                telefono = str(cel(row, 5) or '').strip()
-                dorsal  = cel(row, 6)
-                try: dorsal = int(dorsal) if dorsal else 0
-                except: dorsal = 0
+                nombre = to_str(row[1] if len(row) > 1 else None)
+                if not nombre: continue
 
-                # Abonos e inscripción
-                abono_insc = num(row, 7)
-                debe_insc  = num(row, 8)
+                cedula   = to_str(row[3] if len(row) > 3 else None)
+                salud    = to_str(row[4] if len(row) > 4 else None)
+                telefono = to_str(row[5] if len(row) > 5 else None)
+                dorsal   = to_int(row[6] if len(row) > 6 else None)
+
+                # Inscripción: abono y debe exactos
+                abono_insc = to_int(row[7] if len(row) > 7 else None)
+                debe_insc  = to_int(row[8] if len(row) > 8 else None)
                 total_insc = abono_insc + debe_insc
 
-                # Partidos de arbitraje (columnas 9-14) — monto por partido
+                # Partidos de arbitraje (cols 9-14) — valor por partido redondeado
                 partidos = []
                 for p_idx in range(9, 15):
-                    monto_partido = num(row, p_idx)
-                    if monto_partido > 0:
-                        partidos.append(int(round(monto_partido)))
+                    monto = to_int(row[p_idx] if len(row) > p_idx else None)
+                    partidos.append(monto)  # incluir aunque sea 0
 
-                abono_arb = int(round(num(row, 15)))
-                debe_arb  = int(round(num(row, 16)))
-                total_arb = abono_arb + debe_arb
-                total_abonado = abono_insc + abono_arb
+                # Arbitraje: abono y debe totales exactos
+                abono_arb = to_int(row[15] if len(row) > 15 else None)
+                debe_arb  = to_int(row[16] if len(row) > 16 else None)
 
-                # Determinar si es nuevo en la app
+                # Total abonado directo del Excel (col 17)
+                total_abonado = to_int(row[17] if len(row) > 17 else None)
+
                 es_nuevo = cedula not in existentes_cedulas and dorsal not in existentes_numeros
 
-                # Construir lista de abonos
+                # Construir abonos
                 abonos = []
-                if total_insc > 0 or debe_insc > 0:
+
+                # Inscripción
+                if total_insc > 0 or abono_insc > 0:
                     abonos.append({
                         "concepto": "Inscripción",
                         "tipo": "inscripcion",
                         "fase": None,
-                        "monto_total": int(round(total_insc)),
-                        "abono": int(round(abono_insc)),
+                        "monto_total": total_insc,
+                        "abono": abono_insc,
                     })
-                # Un abono por partido (deuda individual) + abono total sin dividir
+
+                # Cada partido de arbitraje (solo los que tienen monto > 0)
                 for p_num, monto in enumerate(partidos, 1):
-                    abonos.append({
-                        "concepto": f"Arbitraje Partido {p_num}",
-                        "tipo": "arbitraje",
-                        "fase": f"Partido {p_num}",
-                        "monto_total": monto,
-                        "abono": 0,  # El abono total se registra aparte
-                    })
-                # Registrar el abono de arbitraje como un solo pago total (evita errores de redondeo)
+                    if monto > 0:
+                        abonos.append({
+                            "concepto": f"Arbitraje Partido {p_num}",
+                            "tipo": "arbitraje",
+                            "fase": f"Partido {p_num}",
+                            "monto_total": monto,
+                            "abono": 0,
+                        })
+
+                # Abono total de arbitraje como pago único (exacto, sin dividir)
                 if abono_arb > 0:
                     abonos.append({
                         "concepto": "Abono Arbitrajes",
                         "tipo": "arbitraje",
                         "fase": None,
-                        "monto_total": 0,  # Solo es pago, no deuda adicional
+                        "monto_total": 0,
                         "abono": abono_arb,
                     })
 
@@ -612,25 +617,31 @@ async def read_file(
                     "telefono": telefono,
                     "tipo": tipo_actual,
                     "es_nuevo_en_app": es_nuevo,
+                    "es_retirado": en_retirados,
                     "abonos": abonos,
-                    "total_abonado": round(total_abonado),
+                    "total_abonado": total_abonado,
                     "notas": "",
                 })
 
+            # Separar activos de retirados
+            activos   = [j for j in jugadores if not j.get("es_retirado")]
+            retirados = [j for j in jugadores if j.get("es_retirado")]
+
             resumen = {
-                "total_jugadores": len(jugadores),
-                "jugadores_nuevos_en_app": sum(1 for j in jugadores if j["es_nuevo_en_app"]),
-                "jugadores_actualizados": sum(1 for j in jugadores if not j["es_nuevo_en_app"]),
-                "antiguos": sum(1 for j in jugadores if j["tipo"] == "antiguo"),
-                "nuevos_equipo": sum(1 for j in jugadores if j["tipo"] == "nuevo"),
+                "total_jugadores": len(activos),
+                "jugadores_nuevos_en_app": sum(1 for j in activos if j["es_nuevo_en_app"]),
+                "jugadores_actualizados": sum(1 for j in activos if not j["es_nuevo_en_app"]),
+                "antiguos": sum(1 for j in activos if j["tipo"] == "antiguo"),
+                "nuevos_equipo": sum(1 for j in activos if j["tipo"] == "nuevo"),
+                "retirados": len(retirados),
             }
 
             return {
                 "success": True,
                 "formato": "excel_mirador",
-                "jugadores": jugadores,
-                "retirados": [],
-                "total": len(jugadores),
+                "jugadores": activos,
+                "retirados": retirados,
+                "total": len(activos),
                 "resumen": resumen,
             }
 

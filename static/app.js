@@ -1416,7 +1416,46 @@ function renderFinancesTableExcel(finances, configs) {
   const arbs = configs.arbitrajes || [];
   const canEdit = state.isAdmin && !isViewingPast();
 
-  let html = `
+
+  let html = '';
+  let html_rows = '';
+  let sumAbonoInsc=0, sumDebeInsc=0, sumAbonoArb=0, sumDebeArb=0, sumTotal=0;
+
+  finances.forEach((p, i) => {
+    const abonoInsc = p.pago_inscripcion ?? 0;
+    const debeInsc  = Math.max(0, (p.deuda_inscripcion ?? 0) - abonoInsc);
+    const abonoArb  = p.pago_arbitraje ?? 0;
+    const debeArb   = Math.max(0, (p.deuda_arbitraje ?? 0) - abonoArb);
+    const total     = abonoInsc + abonoArb;
+    const pendiente = debeInsc + debeArb;
+    const bg        = i%2===0 ? '' : 'background:var(--surface-low)';
+
+    sumAbonoInsc+=abonoInsc; sumDebeInsc+=debeInsc;
+    sumAbonoArb+=abonoArb; sumDebeArb+=debeArb; sumTotal+=total;
+
+    html_rows += `<tr style="border-bottom:1px solid var(--border-light);${bg}${p.status==='inactivo'?';opacity:0.5':''}">
+      <td style="padding:10px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-faint)">${p.player_number}</td>
+      <td style="padding:10px 12px;font-weight:600;color:var(--navy)">${p.player_name}</td>
+      <td style="padding:10px 8px;text-align:right;color:${abonoInsc>0?'var(--green)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${abonoInsc>0?fmt(abonoInsc):'—'}</td>
+      <td style="padding:10px 8px;text-align:right;color:${debeInsc>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${debeInsc>0?fmt(debeInsc):'✓'}</td>
+      <td style="padding:10px 8px;text-align:right;color:${abonoArb>0?'var(--green)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${abonoArb>0?fmt(abonoArb):'—'}</td>
+      <td style="padding:10px 8px;text-align:right;color:${debeArb>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${debeArb>0?fmt(debeArb):'✓'}</td>
+      <td style="padding:10px 8px;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--navy)">${total>0?fmt(total):'—'}</td>
+      ${canEdit ? `<td style="padding:10px 6px;text-align:center">
+        <button onclick="openQuickPayModal(${p.player_id})" style="font-size:11px;padding:3px 8px;background:var(--lime);color:var(--navy);border:none;border-radius:4px;cursor:pointer;font-weight:700">+</button>
+        <button onclick="togglePlayerHistory(${p.player_id})" style="font-size:11px;padding:3px 8px;background:var(--surface-low);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:2px">≡</button>
+      </td>` : ''}
+    </tr>
+    <tr class="payment-detail-row" id="detail-${p.player_id}" style="display:none">
+      <td colspan="${canEdit?9:8}">
+        <div class="payment-detail-inner" id="history-content-${p.player_id}">
+          <div style="text-align:center;padding:20px;color:var(--text-faint)">Cargando historial...</div>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  html = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div style="font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:0.04em">📊 Cuentas del torneo</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1445,56 +1484,20 @@ function renderFinancesTableExcel(finances, configs) {
             ${canEdit ? `<th></th>` : ''}
           </tr>
         </thead>
-        <tbody>`;
-
-  let sumAbonoInsc=0, sumDebeInsc=0, sumAbonoArb=0, sumDebeArb=0, sumTotal=0;
-
-  finances.forEach((p, i) => {
-    const abonoInsc = p.pago_inscripcion ?? 0;
-    const debeInsc  = Math.max(0, (p.deuda_inscripcion ?? 0) - abonoInsc);
-    const abonoArb  = p.pago_arbitraje ?? 0;
-    const debeArb   = Math.max(0, (p.deuda_arbitraje ?? 0) - abonoArb);
-    const total     = abonoInsc + abonoArb;
-    const bg        = i%2===0 ? '' : 'background:var(--surface-low)';
-
-    sumAbonoInsc+=abonoInsc; sumDebeInsc+=debeInsc;
-    sumAbonoArb+=abonoArb; sumDebeArb+=debeArb; sumTotal+=total;
-
-    html += `<tr style="border-bottom:1px solid var(--border-light);${bg}${p.status==='inactivo'?';opacity:0.5':''}">
-      <td style="padding:10px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-faint)">${p.player_number}</td>
-      <td style="padding:10px 12px;font-weight:600;color:var(--navy)">${p.player_name}</td>
-      <td style="padding:10px 8px;text-align:right;color:${abonoInsc>0?'var(--green)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${abonoInsc>0?fmt(abonoInsc):'—'}</td>
-      <td style="padding:10px 8px;text-align:right;color:${debeInsc>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${debeInsc>0?fmt(debeInsc):'✓'}</td>
-      <td style="padding:10px 8px;text-align:right;color:${abonoArb>0?'var(--green)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${abonoArb>0?fmt(abonoArb):'—'}</td>
-      <td style="padding:10px 8px;text-align:right;color:${debeArb>0?'var(--red)':'var(--text-faint)'};font-family:'JetBrains Mono',monospace;font-size:12px">${debeArb>0?fmt(debeArb):'✓'}</td>
-      <td style="padding:10px 8px;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--navy)">${total>0?fmt(total):'—'}</td>
-      ${canEdit ? `<td style="padding:10px 6px;text-align:center">
-        <button onclick="openQuickPayModal(${p.player_id})" style="font-size:11px;padding:3px 8px;background:var(--lime);color:var(--navy);border:none;border-radius:4px;cursor:pointer;font-weight:700" title="Registrar pago">+</button>
-        <button onclick="togglePlayerHistory(${p.player_id})" style="font-size:11px;padding:3px 8px;background:var(--surface-low);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:2px" title="Ver historial">≡</button>
-      </td>` : ''}
-    </tr>
-    <tr class="payment-detail-row" id="detail-${p.player_id}" style="display:none">
-      <td colspan="${canEdit?8:7}">
-        <div class="payment-detail-inner" id="history-content-${p.player_id}">
-          <div style="text-align:center;padding:20px;color:var(--text-faint)">Cargando historial...</div>
-        </div>
-      </td>
-    </tr>`;
-  });
-
-  html += `</tbody>
-    <tfoot>
-      <tr style="background:var(--navy);color:#fff;font-weight:700">
-        <td colspan="2" style="padding:10px 12px;font-family:'Oswald',sans-serif;letter-spacing:0.05em;font-size:13px">TOTALES</td>
-        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumAbonoInsc)}</td>
-        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeInsc>0?'#ff9999':'#99ff99'}">${fmt(sumDebeInsc)}</td>
-        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumAbonoArb)}</td>
-        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:${sumDebeArb>0?'#ff9999':'#99ff99'}">${fmt(sumDebeArb)}</td>
-        <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime);font-size:15px">${fmt(sumTotal)}</td>
-        ${canEdit ? `<td></td>` : ''}
-      </tr>
-    </tfoot>
-  </table></div>`;
+        <tbody>` + html_rows + `</tbody>
+        <tfoot>
+          <tr style="background:var(--navy);color:#fff;font-weight:700">
+            <td colspan="2" style="padding:10px 12px;font-family:'Oswald',sans-serif;letter-spacing:0.05em;font-size:13px">TOTALES</td>
+            <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumAbonoInsc)}</td>
+            <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:#ff9999">${fmt(sumDebeInsc)}</td>
+            <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime)">${fmt(sumAbonoArb)}</td>
+            <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:#ff9999">${fmt(sumDebeArb)}</td>
+            <td style="padding:10px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--lime);font-size:15px">${fmt(sumTotal)}</td>
+            ${canEdit ? `<td></td>` : ''}
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
 
   wrap.innerHTML = html;
 }
