@@ -1422,10 +1422,12 @@ function renderFinancesTableExcel(finances, configs) {
   let sumAbonoInsc=0, sumDebeInsc=0, sumAbonoArb=0, sumDebeArb=0, sumTotal=0;
 
   finances.forEach((p, i) => {
-    const abonoInsc = p.pago_inscripcion ?? 0;
-    const debeInsc  = Math.max(0, (p.deuda_inscripcion ?? 0) - abonoInsc);
-    const abonoArb  = p.pago_arbitraje ?? 0;
-    const debeArb   = Math.max(0, (p.deuda_arbitraje ?? 0) - abonoArb);
+    const abonoInsc = Math.round(p.pago_inscripcion ?? 0);
+    const deudaInsc = Math.round(p.deuda_inscripcion ?? 0);
+    const debeInsc  = Math.max(0, deudaInsc - abonoInsc);
+    const abonoArb  = Math.round(p.pago_arbitraje ?? 0);
+    const deudaArb  = Math.round(p.deuda_arbitraje ?? 0);
+    const debeArb   = Math.max(0, deudaArb - abonoArb);
     const total     = abonoInsc + abonoArb;
     const pendiente = debeInsc + debeArb;
     const bg        = i%2===0 ? '' : 'background:var(--surface-low)';
